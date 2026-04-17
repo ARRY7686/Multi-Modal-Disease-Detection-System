@@ -1,0 +1,195 @@
+{
+  "image_backbone": "efficientnet_b4",
+  "image_feature_dim": 1792,
+  "image_size": 380,
+  "text_model_name": "dmis-lab/biobert-v1.1",
+  "text_hidden_dim": 768,
+  "projection_dim": 512,
+  "dropout": 0.3,
+  "num_classes": 25,
+  "fusion_type": "cross_attention",
+  "fusion_num_heads": 8,
+  "fusion_num_cross_layers": 2,
+  "all_labels": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Effusion",
+    "Infiltration",
+    "Mass",
+    "Nodule",
+    "Pneumonia",
+    "Pneumothorax",
+    "Consolidation",
+    "Edema",
+    "Emphysema",
+    "Fibrosis",
+    "Pleural_Thickening",
+    "Hernia",
+    "Melanoma",
+    "Melanocytic_Nevi",
+    "Basal_Cell_Carcinoma",
+    "Actinic_Keratosis",
+    "Benign_Keratosis",
+    "Dermatofibroma",
+    "Vascular_Lesion",
+    "Glioma",
+    "Meningioma",
+    "Pituitary_Tumor",
+    "No_Tumor"
+  ],
+  "modality_index_ranges": {
+    "chest": [
+      0,
+      14
+    ],
+    "skin": [
+      14,
+      21
+    ],
+    "brain": [
+      21,
+      25
+    ]
+  },
+  "training_results": {
+    "multimodal": {
+      "f1": 0.8564204788685126,
+      "auc": 0.9889427806781125
+    },
+    "image_only": {
+      "f1": 0.06492648772854662,
+      "auc": 0.45826489980981067
+    },
+    "text_only": {
+      "f1": 0.05771729459923772,
+      "auc": 0.5776502532533702
+    },
+    "concat_fusion": {
+      "f1": 0.8583787203752083,
+      "auc": 0.0
+    }
+  },
+  "best_multimodal_f1": 0.8564204788685126,
+  "training_history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.010599347596243732,
+      "train_f1": 0.44311974165534357,
+      "val_loss": 0.0033894879401486834,
+      "val_f1": 0.8113609334206742,
+      "val_auc": 0.9827166722941081
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.0034829940962912216,
+      "train_f1": 0.8043911168031747,
+      "val_loss": 0.0028141892631408285,
+      "val_f1": 0.8367199394327011,
+      "val_auc": 0.985215924022127
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.0031668577134597,
+      "train_f1": 0.837603512865156,
+      "val_loss": 0.002759664771230876,
+      "val_f1": 0.838324155247873,
+      "val_auc": 0.9854462887289881
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.0030375263664298483,
+      "train_f1": 0.8436183726721664,
+      "val_loss": 0.0027381247861187927,
+      "val_f1": 0.8525351952483808,
+      "val_auc": 0.9844946903922076
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.0029729227460346484,
+      "train_f1": 0.8468468484418455,
+      "val_loss": 0.0026409711176971283,
+      "val_f1": 0.8474601594324287,
+      "val_auc": 0.98634817184202
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.002853842771471536,
+      "train_f1": 0.8431025543649251,
+      "val_loss": 0.0025627518012527164,
+      "val_f1": 0.8505220286297738,
+      "val_auc": 0.9874135176881005
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.0028014189408708265,
+      "train_f1": 0.8508070991595875,
+      "val_loss": 0.0025686679017415566,
+      "val_f1": 0.8499707293229348,
+      "val_auc": 0.9882743049627833
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.002714539331226894,
+      "train_f1": 0.8563018089674769,
+      "val_loss": 0.002529443597007587,
+      "val_f1": 0.8504498717997637,
+      "val_auc": 0.9880493984740191
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.0026857868653326093,
+      "train_f1": 0.85459029074948,
+      "val_loss": 0.0024759052436418676,
+      "val_f1": 0.8458345516000313,
+      "val_auc": 0.9884528558483752
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.002610207952944443,
+      "train_f1": 0.8559877394129041,
+      "val_loss": 0.002472205788732294,
+      "val_f1": 0.8533689272888509,
+      "val_auc": 0.9882927139475141
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.0025798857810163944,
+      "train_f1": 0.8608317659463265,
+      "val_loss": 0.0024310619002213636,
+      "val_f1": 0.8547093698569835,
+      "val_auc": 0.9877290975148929
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.0025297049138883966,
+      "train_f1": 0.8595694449806877,
+      "val_loss": 0.0024335242047114443,
+      "val_f1": 0.8551217346345902,
+      "val_auc": 0.9884028239245327
+    },
+    {
+      "epoch": 13,
+      "train_loss": 0.0024631887387935795,
+      "train_f1": 0.8613260050429272,
+      "val_loss": 0.0024400625393808085,
+      "val_f1": 0.8563635123587093,
+      "val_auc": 0.9884943359089569
+    },
+    {
+      "epoch": 14,
+      "train_loss": 0.002459247855401826,
+      "train_f1": 0.8617033618462249,
+      "val_loss": 0.0023903324313228123,
+      "val_f1": 0.8542866326129218,
+      "val_auc": 0.9889020236528964
+    },
+    {
+      "epoch": 15,
+      "train_loss": 0.0023807009161093376,
+      "train_f1": 0.8679450337137448,
+      "val_loss": 0.0024090074335034674,
+      "val_f1": 0.8564204788685126,
+      "val_auc": 0.9889427806781125
+    }
+  ]
+}

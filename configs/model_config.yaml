@@ -1,0 +1,174 @@
+# =============================================================================
+# Multi-Modal Disease Detection System — Central Configuration
+# =============================================================================
+
+project:
+  name: "MultiModal Disease Detection"
+  version: "1.0.0"
+
+# ---------------------------------------------------------------------------
+# Model Architecture
+# ---------------------------------------------------------------------------
+model:
+  projection_dim: 512
+  dropout: 0.3
+  num_classes: 25
+
+  image_encoder:
+    backbone: "efficientnet_b4"
+    pretrained: true
+    feature_dim: 1792          # EfficientNet-B4 final feature channels
+    image_size: 380
+    spatial_size: 12           # 380 → 12×12 after backbone
+    freeze_backbone: false
+
+  text_encoder:
+    model_name: "dmis-lab/biobert-v1.1"
+    hidden_dim: 768
+    max_length: 128
+    freeze_bert: false
+
+  fusion:
+    type: "cross_attention"     # "cross_attention" | "concat"
+    num_heads: 8
+    hidden_dim: 1024
+    num_cross_layers: 2
+
+  modality_classifier:
+    backbone: "mobilenet_v3_small"
+    num_classes: 3              # chest / skin / brain
+
+# ---------------------------------------------------------------------------
+# Label Map — 25 unified disease labels
+# ---------------------------------------------------------------------------
+labels:
+  # Chest X-ray (NIH ChestX-ray14) — indices 0–13
+  chest:
+    - "Atelectasis"
+    - "Cardiomegaly"
+    - "Effusion"
+    - "Infiltration"
+    - "Mass"
+    - "Nodule"
+    - "Pneumonia"
+    - "Pneumothorax"
+    - "Consolidation"
+    - "Edema"
+    - "Emphysema"
+    - "Fibrosis"
+    - "Pleural_Thickening"
+    - "Hernia"
+
+  # Skin (HAM10000) — indices 14–20
+  skin:
+    - "Melanoma"
+    - "Melanocytic_Nevi"
+    - "Basal_Cell_Carcinoma"
+    - "Actinic_Keratosis"
+    - "Benign_Keratosis"
+    - "Dermatofibroma"
+    - "Vascular_Lesion"
+
+  # Brain MRI — indices 21–24
+  brain:
+    - "Glioma"
+    - "Meningioma"
+    - "Pituitary_Tumor"
+    - "No_Tumor"
+
+# Map each modality to its index range in the 25-class vector
+modality_index_ranges:
+  chest: [0, 14]     # [start, end) → 0..13
+  skin: [14, 21]     # 14..20
+  brain: [21, 25]    # 21..24
+
+modality_names: ["chest", "skin", "brain"]
+
+# ---------------------------------------------------------------------------
+# Training Hyperparameters (used by Kaggle notebooks)
+# ---------------------------------------------------------------------------
+training:
+  image:
+    batch_size: 16
+    epochs_frozen: 5
+    epochs_unfrozen: 15
+    lr_frozen: 1.0e-4
+    lr_unfrozen: 1.0e-5
+    weight_decay: 0.01
+    scheduler: "cosine"
+    mixed_precision: true
+    num_workers: 4
+
+  text:
+    batch_size: 32
+    epochs_frozen: 3
+    epochs_unfrozen: 10
+    lr: 2.0e-5
+    weight_decay: 0.01
+    warmup_steps: 100
+    scheduler: "linear_warmup_cosine"
+
+  multimodal:
+    batch_size: 16
+    epochs_frozen: 5
+    epochs_unfrozen: 15
+    lr_encoders: 1.0e-6
+    lr_fusion: 1.0e-4
+    weight_decay: 0.01
+    scheduler: "cosine"
+
+  loss:
+    type: "focal"              # "focal" | "bce_weighted"
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+
+# ---------------------------------------------------------------------------
+# Dataset configuration (Kaggle paths)
+# ---------------------------------------------------------------------------
+datasets:
+  chest:
+    name: "nih-chest-xrays"
+    csv: "Data_Entry_2017_v2020.csv"
+    image_dir: "images"
+    sample_fraction: 0.30
+    multi_label: true
+
+  skin:
+    name: "kmader/skin-cancer-mnist-ham10000"
+    csv: "HAM10000_metadata.csv"
+    image_dirs:
+      - "HAM10000_images_part_1"
+      - "HAM10000_images_part_2"
+    multi_label: false
+
+  brain:
+    name: "sartajbhuvaji/brain-tumor-classification-mri"
+    train_dir: "Training"
+    test_dir: "Testing"
+    multi_label: false
+
+  symptoms:
+    samples_per_disease: 200
+    val_split: 0.2
+
+# ---------------------------------------------------------------------------
+# Inference Settings (local)
+# ---------------------------------------------------------------------------
+inference:
+  device: "cpu"
+  model_dir: "models"
+  confidence_threshold: 0.5
+  top_k_predictions: 5
+  gradcam_target_layer: "features.-1"
+  text_top_k_tokens: 10
+
+# ---------------------------------------------------------------------------
+# API Settings
+# ---------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+  max_upload_size_mb: 50

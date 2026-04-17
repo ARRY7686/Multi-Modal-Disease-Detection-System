@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (download separately)
+models/*.pth
+models/*.pt
+models/*.bin
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Kaggle
+kaggle_notebooks/.ipynb_checkpoints/
