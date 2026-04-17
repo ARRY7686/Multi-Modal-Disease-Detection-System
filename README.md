@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**A production-grade, end-to-end multi-modal medical disease detection system**
+**Multi-Modal Medical Diagnosis Prototype with Cross-Attention Fusion**
 
 Combines **medical image analysis** (chest X-rays, dermoscopy, brain MRI) with **clinical symptom text understanding** (BioBERT) via **bidirectional cross-attention fusion** for 25-class multi-label diagnosis with full visual and textual explainability.
 
