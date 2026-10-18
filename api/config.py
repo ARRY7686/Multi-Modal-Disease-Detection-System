@@ -4,12 +4,10 @@ Configuration loader — reads configs/model_config.yaml and exposes typed helpe
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
-
 
 # Project root: two levels up from this file  (api/config.py → project root)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +27,13 @@ class Config:
 
     def __init__(self, path: Path = CONFIG_PATH):
         self._data = _load_yaml(path)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Config":
+        """Build a Config from an in-memory dict (used by tests)."""
+        obj = cls.__new__(cls)
+        obj._data = data
+        return obj
 
     @classmethod
     def get(cls, path: Path = CONFIG_PATH) -> "Config":
@@ -163,8 +168,12 @@ class Config:
         return self._data["inference"]["top_k_predictions"]
 
     @property
-    def gradcam_target_layer(self) -> str:
-        return self._data["inference"]["gradcam_target_layer"]
+    def min_modality_confidence(self) -> float:
+        return self._data["inference"].get("min_modality_confidence", 0.0)
+
+    @property
+    def min_mode_val_auc(self) -> float:
+        return self._data["inference"].get("min_mode_val_auc", 0.0)
 
     @property
     def text_top_k_tokens(self) -> int:

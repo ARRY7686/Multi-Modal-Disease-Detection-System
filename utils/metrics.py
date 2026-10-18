@@ -4,16 +4,15 @@ Evaluation metrics for multi-label disease classification.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 from sklearn.metrics import (
+    average_precision_score,
     f1_score,
-    roc_auc_score,
     precision_score,
     recall_score,
-    average_precision_score,
-    classification_report,
+    roc_auc_score,
 )
 
 

@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import itertools
 import random
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Disease → symptom templates

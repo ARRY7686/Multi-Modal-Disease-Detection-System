@@ -5,7 +5,7 @@ Text preprocessing — BioBERT tokenization wrapper and symptom text cleaning.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 from transformers import AutoTokenizer

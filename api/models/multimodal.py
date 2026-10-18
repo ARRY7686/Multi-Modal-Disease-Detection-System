@@ -14,9 +14,9 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 
+from .fusion import CrossAttentionFusion
 from .image_encoder import ImageEncoder
 from .text_encoder import TextEncoder
-from .fusion import CrossAttentionFusion, ConcatFusion
 
 
 class MultiModalDetector(nn.Module):
@@ -81,11 +81,16 @@ class MultiModalDetector(nn.Module):
         }
 
     @classmethod
-    def from_config(cls, cfg) -> "MultiModalDetector":
-        """Construct from a Config object."""
+    def from_config(cls, cfg, pretrained: bool = True) -> "MultiModalDetector":
+        """
+        Construct from a Config object.
+
+        pretrained=False skips downloading ImageNet / BioBERT weights; use it
+        when a trained checkpoint is about to be loaded over the whole model.
+        """
         image_encoder = ImageEncoder(
             backbone_name=cfg.image_backbone,
-            pretrained=cfg.image_pretrained,
+            pretrained=pretrained and cfg.image_pretrained,
             feature_dim=cfg.image_feature_dim,
             projection_dim=cfg.projection_dim,
             dropout=cfg.dropout,
@@ -96,6 +101,7 @@ class MultiModalDetector(nn.Module):
             projection_dim=cfg.projection_dim,
             dropout=cfg.dropout,
             max_length=cfg.text_max_length,
+            pretrained=pretrained,
         )
         fusion = CrossAttentionFusion(
             dim=cfg.projection_dim,

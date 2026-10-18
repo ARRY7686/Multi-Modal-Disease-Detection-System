@@ -72,6 +72,11 @@ class ImageEncoder(nn.Module):
         return self.features(x)
 
     # -----------------------------------------------------------------
+    def gradcam_layer(self) -> nn.Module:
+        """Last conv block of the backbone (features is Sequential(backbone.features))."""
+        return self.features[0][-1]
+
+    # -----------------------------------------------------------------
     def freeze_backbone(self) -> None:
         for param in self.features.parameters():
             param.requires_grad = False

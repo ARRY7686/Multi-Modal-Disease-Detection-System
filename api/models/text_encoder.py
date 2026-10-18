@@ -16,7 +16,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 
 class TextEncoder(nn.Module):
@@ -28,13 +28,24 @@ class TextEncoder(nn.Module):
         dropout: float = 0.3,
         max_length: int = 128,
         freeze_bert: bool = False,
+        pretrained: bool = True,
     ):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.projection_dim = projection_dim
         self.max_length = max_length
 
-        self.bert = AutoModel.from_pretrained(model_name, output_attentions=True)
+        # pretrained=False builds the architecture only (config download, no
+        # weights) — used when a fine-tuned checkpoint will be loaded on top.
+        # Eager attention: SDPA kernels do not return attention maps, which the
+        # text explanation needs.
+        if pretrained:
+            self.bert = AutoModel.from_pretrained(
+                model_name, output_attentions=True, attn_implementation="eager",
+            )
+        else:
+            bert_cfg = AutoConfig.from_pretrained(model_name, output_attentions=True)
+            self.bert = AutoModel.from_config(bert_cfg, attn_implementation="eager")
 
         if freeze_bert:
             for param in self.bert.parameters():
