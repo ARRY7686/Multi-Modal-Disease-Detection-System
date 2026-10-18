@@ -79,7 +79,7 @@ def _splits(cfg, root):
     return {
         "nih": D.load_nih(cfg, root, val_fraction=0.25),
         "ham": D.load_ham10000(cfg, root, val_fraction=0.15),
-        "brain": D.load_brain_mri(cfg, root, val_fraction=0.2),
+        "brain": D.load_brain_mri(cfg, root, test_fraction=0.25, val_fraction=0.2),
     }
 
 
@@ -91,9 +91,13 @@ def test_splits_are_group_disjoint_and_deduplicated(tiny_cfg, fake_data):
     # NIH official test list is honoured and normal X-rays are kept
     assert {r.group for r in parts["nih"]["test"]} == {f"nih-{p}" for p in range(4)}
     assert any(r.labels.sum() == 0 for r in parts["nih"]["train"])
-    # the copied training image is removed from the brain test split
-    assert not any(r.image_path.endswith("dup.jpg") for r in parts["brain"]["test"])
-    assert len(parts["brain"]["test"]) == 12
+    # a duplicated brain image lands in the same split, and the same group, as its original
+    brain = {r.image_path.replace("\\", "/"): (split, r.group) for split, recs in parts["brain"].items() for r in recs}
+    dup = next(v for k, v in brain.items() if k.endswith("Testing/glioma_tumor/dup.jpg"))
+    original = next(v for k, v in brain.items() if k.endswith("Training/glioma_tumor/image(0).jpg"))
+    assert dup == original
+    assert len(brain) == 4 * 9 + 1
+    assert {int(r.labels.argmax()) for r in parts["brain"]["test"]} == {21, 22, 23, 24}  # every class tested
 
 
 def test_paired_text_never_contains_the_diagnosis(tiny_cfg, fake_data):

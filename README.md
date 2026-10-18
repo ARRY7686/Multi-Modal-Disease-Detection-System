@@ -53,8 +53,10 @@ Combines **medical image analysis** (chest X-rays, dermoscopy, brain MRI) with *
 - **Bidirectional cross-attention fusion** — Image and text representations attend to each other across 2 transformer layers with 8 attention heads
 - **Automatic modality routing** — MobileNetV3-Small classifier auto-detects if an uploaded image is a chest X-ray, skin lesion photograph, or brain MRI scan (with a color-statistics heuristic fallback)
 - **Dual explainability** — Grad-CAM heatmaps for image regions + attention-weighted token importance for symptom text
-- **Three-phase Kaggle training** — Modular notebook pipeline (image → text → fusion) designed for Kaggle GPU instances
-- **Production-ready API** — FastAPI backend with Pydantic validation, CORS, async file handling, and CPU-optimized inference
+- **Leak-free evaluation** — Paired text is real patient metadata, splits are patient-, lesion- and duplicate-disjoint, and the test sets are scored once with bootstrap confidence intervals
+- **Calibrated outputs** — Temperatures and per-class decision thresholds fitted on validation, reported per prediction
+- **One-script training** — `training/` trains the image-only, text-only and fusion heads together and imports the API's model code, so the weights always load
+- **Production-ready API** — FastAPI backend with Pydantic validation, CORS, upload size limits, clear 4xx errors, and CPU inference
 - **Modern frontend** — React 18 + Vite + Tailwind CSS with drag-and-drop upload, interactive heatmap overlay, and highlighted symptom tokens
 
 ---
@@ -105,47 +107,94 @@ graph TB
 
 ## Model Performance
 
-> [!WARNING]
-> **The multimodal numbers below are inflated and are being replaced.** In the current
-> training notebooks each image's symptom text is generated *from that image's ground-truth
-> label*, in training and in validation, so the fusion model can read the diagnosis out of the
-> text. This is why skin and brain score a perfect 1.000 while the image encoder alone reaches
-> macro F1 0.42. The splits are also not patient-disjoint (NIH patients, HAM10000 `lesion_id`).
-> A model retrained on real paired patient data with patient-level splits is in progress; until
-> then, treat the image-encoder row as the only meaningful result.
+All numbers are from **held-out test sets that no training or tuning step saw**: the NIH
+ChestX-ray14 official test list (patient-disjoint), a HAM10000 hold-out grouped by `lesion_id`,
+and a brain MRI hold-out with duplicate images grouped (see [below](#brain-mri-duplicates)).
+The paired text is real recorded metadata (age, sex, X-ray view, lesion site), never the label.
+Temperatures and per-class thresholds were fitted on validation only, and the test sets were
+evaluated once. 95% bootstrap confidence intervals (500 resamples) in brackets.
 
-### Multimodal Fusion (Cross-Attention)
+| Mode | Chest macro AUROC | Skin balanced acc. | Skin macro AUROC | Brain accuracy | Brain macro AUROC | ECE |
+|---|---|---|---|---|---|---|
+| **multimodal** | 0.755 [0.751, 0.759] | 0.608 [0.551, 0.671] | 0.954 [0.942, 0.965] | 0.958 | 0.992 [0.986, 0.997] | 0.011 |
+| **image only** | **0.759** [0.754, 0.763] | **0.640** [0.584, 0.700] | **0.957** | 0.945 | **0.993** | 0.013 |
+| **text only** | 0.597 [0.591, 0.602] | 0.202 [0.191, 0.214] | 0.774 | 0.304 | 0.500 | 0.028 |
 
-| Metric | Score |
-|--------|-------|
-| **Macro F1** | **0.8564** |
-| **Macro AUC-ROC** | **0.9889** |
+Test sets: 25,596 chest X-rays, 1,441 skin lesion photos, 457 brain MRIs. Model: EfficientNet-B4
+(380 px) + BioBERT with cross-attention fusion, trained for 8 epochs on 30% of the NIH training
+patients, all of HAM10000 train and brain train (about 2.5 h on one Kaggle T4).
+Modality classifier test accuracy: 0.9999.
 
-### Per-Modality Breakdown
+**What these numbers say**
 
-| Modality | F1 Score | AUC-ROC |
-|----------|----------|---------|
-| Skin (7 classes) | 1.0000 | 1.0000 |
-| Brain (4 classes) | 1.0000 | 1.0000 |
-| Chest (14 classes) | 0.7436 | 0.9058 |
+- **The image does almost all the work.** Image-only and multimodal scores are within each other's
+  confidence intervals in every column. The recorded metadata adds no measurable accuracy on top of
+  the image: chest X-rays come with only age, sex and view position, and brain MRIs with nothing.
+- **Metadata alone is weak but not empty.** Age, sex and lesion site rank skin diagnoses at 0.77
+  AUROC (site and age genuinely differ between melanoma, nevi and keratoses), and age plus view
+  position give 0.60 on chest. Brain text-only is exactly chance (0.500), as it must be: every brain
+  scan has the same placeholder text, which confirms the text carries no hidden label.
+- **The model is calibrated out of the box.** The fitted temperatures are 0.99-1.02, and the
+  expected calibration error is 0.011 before and after scaling, so the confidences the API returns
+  can be read as probabilities.
+- **Chest is the hard part.** 0.755 macro AUROC on the official patient-disjoint split, from 30% of
+  the training patients. The best findings are Hernia (0.85), Pneumothorax (0.82) and Edema (0.81);
+  the worst are Nodule (0.68) and Infiltration (0.70). Training on all patients is the main lever
+  (`--chest-train-fraction 1.0`).
 
-### Individual Encoder Performance (Pre-Fusion)
+<details>
+<summary>Chest per-class AUROC</summary>
 
-| Encoder | Macro F1 (optimized thresholds) | Macro AUC-ROC |
-|---------|--------------------------------|---------------|
-| Image (EfficientNet-B4) | 0.4206 | 0.9216 |
-| Text (BioBERT) | 0.9485 | 0.9986 |
+| Finding | Multimodal | Image only |
+|---|---|---|
+| Atelectasis | 0.734 | 0.738 |
+| Cardiomegaly | 0.751 | 0.783 |
+| Effusion | 0.797 | 0.800 |
+| Infiltration | 0.696 | 0.695 |
+| Mass | 0.737 | 0.727 |
+| Nodule | 0.679 | 0.687 |
+| Pneumonia | 0.699 | 0.690 |
+| Pneumothorax | 0.816 | 0.823 |
+| Consolidation | 0.715 | 0.710 |
+| Edema | 0.811 | 0.818 |
+| Emphysema | 0.796 | 0.801 |
+| Fibrosis | 0.765 | 0.776 |
+| Pleural Thickening | 0.719 | 0.722 |
+| Hernia | 0.855 | 0.850 |
+
+</details>
 
 ### Training Convergence
 
-Multimodal fusion training converged over 15 epochs (5 frozen + 10 unfrozen):
+Validation macro AUROC over all 25 labels (chest, skin and brain pooled), 1 epoch with frozen
+backbones and then 7 fine-tuned:
 
-| Epoch | Train Loss | Train F1 | Val Loss | Val F1 | Val AUC |
-|-------|-----------|----------|----------|--------|---------|
-| 1 | 0.01060 | 0.4431 | 0.00339 | 0.8114 | 0.9827 |
-| 5 | 0.00297 | 0.8468 | 0.00264 | 0.8475 | 0.9863 |
-| 10 | 0.00261 | 0.8560 | 0.00247 | 0.8534 | 0.9883 |
-| 15 | 0.00238 | 0.8679 | 0.00241 | 0.8564 | 0.9889 |
+| Epoch | Train loss | Multimodal | Image only | Text only |
+|---|---|---|---|---|
+| 1 (frozen) | 0.420 | 0.815 | 0.828 | 0.576 |
+| 2 | 0.356 | 0.864 | 0.882 | 0.596 |
+| 4 | 0.318 | 0.897 | 0.906 | 0.622 |
+| 6 | 0.294 | 0.909 | 0.916 | 0.625 |
+| 8 | 0.288 | 0.910 | 0.918 | 0.625 |
+
+### Brain MRI duplicates
+
+The official `Testing/` folder of the brain tumour dataset cannot be used as a test set: **255 of
+its 394 images are copies of training images** (re-encoded, 99% pixel-identical, the same label in
+253 of 255 cases), including every one of the 105 `no_tumor` test images. A model evaluated on it is
+partly graded on images it trained on. The pipeline pools `Training/` and `Testing/`, groups
+near-identical images by perceptual hash (dHash), keeps each group inside one split, and drops the
+29 images whose copies carry different labels.
+
+### Why the earlier numbers were replaced
+
+The first version of this project reported a multimodal macro AUROC of 0.989 and a perfect 1.000 on
+skin and brain. Those numbers measured label leakage, not diagnosis: each image's symptom text was
+generated from that image's own label, in training and evaluation, so the model could read the
+answer from the text (text-only AUROC was 0.999). The splits also let the same patient, lesion or
+duplicated MRI appear in both training and test. The current pipeline removes all three leaks, and
+`tests/test_training.py` checks that no label word appears in any paired text and that no patient,
+lesion or duplicate group crosses splits.
 
 ---
 
@@ -289,7 +338,7 @@ it clones this repository and calls the training script.
 1. Create a Kaggle notebook from `kaggle_notebooks/train_v2.ipynb`, with **GPU T4** and **Internet on**.
 2. Add the input datasets `nih-chest-xrays/data`, `kmader/skin-cancer-mnist-ham10000` and
    `sartajbhuvaji/brain-tumor-classification-mri`.
-3. Run all (about 2.5 h with the defaults). Download `models.zip` and unzip it into `models/`.
+3. Run all (about 2.5-3 h on a T4 with the defaults). Download `models.zip` and unzip it into `models/`.
 
 The same script runs anywhere the datasets are on disk:
 
@@ -368,9 +417,9 @@ Accepts any combination of image and/or symptoms. Auto-detects the inference mod
 | `modality` given | `user` | Used as-is |
 | Image, auto | `classifier` | MobileNetV3 modality classifier. Below `min_modality_confidence` (0.6) the request is rejected with **422**, so out-of-scope images do not get a diagnosis |
 | Image, auto, no classifier weights | `heuristic` | Colour-statistics fallback |
-| Text only, auto | `text` | Modality of the text model's top-scoring label |
+| Text only, auto | `text` | The modality the text names (e.g. *chest radiograph*, *lesion*, *mole*, *MRI*, *seizures*). If it names none or several, **422** asks for `modality`. The disease scores themselves cannot choose: each head is trained only on its own modality's samples, so a skin score and a chest score are not on a common scale |
 
-**Errors:** `400` missing or invalid input or unreadable image, `413` upload over `max_upload_size_mb`, `422` image not recognised as a supported modality.
+**Errors:** `400` missing or invalid input or unreadable image, `413` upload over `max_upload_size_mb`, `422` image not recognised as a supported modality, or text-only input that does not say which modality it describes.
 
 ### `POST /predict-multimodal`
 
@@ -556,7 +605,7 @@ Attention-based importance scoring from BioBERT's self-attention layers.
 NIH ChestX-ray14 ─┐  official patient-disjoint test list; validation split by Patient ID;
                   │  text = age, sex, PA/AP view; "No Finding" X-rays kept
 HAM10000 ─────────┤  split by lesion_id; text = age, sex, lesion site (dx_type unused: it encodes the label)
-Brain Tumor MRI ──┘  official Testing folder minus duplicates of Training; text = "No clinical details provided."
+Brain Tumor MRI ──┘  Training+Testing re-split with duplicate images grouped; text = "No clinical details provided."
         │
         ▼
 EfficientNet-B4 ──┬── image head ──────────────► image-only logits      ┐
@@ -604,10 +653,11 @@ All architecture, training, and inference settings are centralized in `configs/m
 | Image backbone | EfficientNet-B4 | 1792-dim features with compound scaling — best accuracy/efficiency tradeoff for medical imaging |
 | Text encoder | BioBERT v1.1 | Pre-trained on 18B tokens from PubMed abstracts + PMC articles — understands medical terminology |
 | Fusion strategy | Bidirectional cross-attention (2 layers, 8 heads) | Richer interaction than simple concatenation — text attends to spatial image regions and vice versa |
-| Loss function | Focal Loss (α=0.75, γ=2.0) | Downweights easy negatives; critical for severe class imbalance (14 chest diseases vs. 4 brain) |
-| Training strategy | Frozen → Unfrozen with differential LR | Prevents catastrophic forgetting; encoder LR (1e-6) is 100× lower than fusion LR (1e-4) |
+| Loss function | BCE masked to each sample's own modality | An X-ray has no skin or brain labels; masking stops those 11 outputs being trained as false negatives |
+| Training strategy | 1 frozen epoch, then full fine-tuning with differential LR | Heads settle before the backbones move; head 3e-4, EfficientNet 1e-4, BioBERT 2e-5 |
+| Auxiliary heads | Image-only and text-only heads trained with the fusion head | The API can serve one input alone with a trained head, and the comparison shows what each input contributes |
 | Modality detection | MobileNetV3-Small + heuristic fallback | Lightweight (2.5M params); heuristic provides graceful degradation if weights unavailable |
-| Inference device | CPU-only | Eliminates GPU dependency for deployment; inference takes ~2-5s per prediction |
+| Inference device | CPU-only | Eliminates GPU dependency for deployment; about 0.5 s per image prediction including Grad-CAM (laptop CPU, EfficientNet-B4 at 380 px) |
 | Explainability | Grad-CAM + attention weights | Clinically important — doctors need to see *why* the model predicts what it does |
 | Frontend | React 18 + Vite + Tailwind | Fast HMR development, utility-first styling, modern component architecture |
 | API framework | FastAPI | Async support, auto-generated OpenAPI docs, Pydantic validation, native file upload handling |
@@ -621,7 +671,7 @@ All architecture, training, and inference settings are centralized in `configs/m
 | [NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data) | 45.1 GB (30% used) | 14 | Chest X-ray | NIH Clinical Center |
 | [HAM10000](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000) | 2.9 GB | 7 | Dermoscopy | ISIC Archive |
 | [Brain Tumor Classification (MRI)](https://www.kaggle.com/datasets/sartajbhuvaji/brain-tumor-classification-mri) | ~90 MB | 4 | Brain MRI | Kaggle |
-| Synthetic Symptoms | Generated at runtime | 25 | Clinical text | GPT-generated templates × 200/disease |
+| Paired text | From the dataset metadata | — | Clinical text | Age, sex and X-ray view (NIH); age, sex and lesion site (HAM10000) |
 
 ---
 

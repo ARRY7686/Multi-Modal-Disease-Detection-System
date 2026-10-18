@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -35,6 +36,21 @@ logger = logging.getLogger(__name__)
 
 MODALITIES = ("chest", "skin", "brain")
 MODES = ("multimodal", "image_only", "text_only")
+
+# Words that tie free text to one imaging modality, used to route text-only requests.
+# The disease heads are trained with the loss masked to each sample's own modality, so
+# scores from different modalities are not on a common scale and cannot pick one.
+MODALITY_KEYWORDS = {
+    "chest": re.compile(r"\b(chest|lungs?|x-?rays?|radiograph\w*|cough\w*|breath\w*|dyspn\w*|pleur\w*|pneumo\w*)\b", re.I),
+    "skin": re.compile(r"\b(skin|lesions?|moles?|rash\w*|derm\w*|na?evus|na?evi|freckles?|itch\w*)\b", re.I),
+    "brain": re.compile(r"\b(brain|mri|headaches?|seizures?|neuro\w*|cerebr\w*|dizz\w*)\b", re.I),
+}
+
+
+def modality_from_text(text: str) -> Optional[str]:
+    """The one modality the text's wording points to, or None if none or several."""
+    hits = [m for m, pattern in MODALITY_KEYWORDS.items() if pattern.search(text)]
+    return hits[0] if len(hits) == 1 else None
 
 
 class InvalidInput(ValueError):
@@ -278,7 +294,13 @@ class InferenceService:
         elif image is not None:
             modality, modality_confidence, modality_source = self._detect_image_modality(image)
         else:
-            modality_source = "text"  # resolved from the text predictions below
+            modality, modality_source = modality_from_text(text), "text"
+            if modality is None:
+                raise InvalidInput(
+                    "Could not tell from the text alone whether it describes a chest X-ray, a skin "
+                    "lesion or a brain MRI. Choose the modality, or add an image.",
+                    status_code=422,
+                )
 
         img_tensor = None
         if image is not None:
@@ -297,10 +319,6 @@ class InferenceService:
         temperature = self.temperatures.get(mode, 1.0)
         with torch.no_grad():
             probs = torch.sigmoid(logit_fn() / temperature)[0].cpu().numpy()
-
-        if modality_source == "text":
-            # No image and no hint: use the modality of the text model's top label.
-            modality = self._modality_of_label(int(probs.argmax()))
 
         predictions = self._rank(probs, modality, mode)
 
@@ -358,13 +376,6 @@ class InferenceService:
                 status_code=422,
             )
         return modality, confidence, "classifier"
-
-    def _modality_of_label(self, label_index: int) -> str:
-        for modality in MODALITIES:
-            start, end = self.cfg.modality_index_range(modality)
-            if start <= label_index < end:
-                return modality
-        raise ValueError(f"Label index {label_index} belongs to no modality")
 
     def _rank(self, probs: np.ndarray, modality: str, mode: str) -> List[DiseaseScore]:
         labels = self.cfg.all_labels
