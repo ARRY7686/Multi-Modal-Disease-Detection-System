@@ -12,11 +12,11 @@ Also exposes `last_attention_weights` after each forward pass for explainability
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 
 class TextEncoder(nn.Module):
@@ -28,13 +28,24 @@ class TextEncoder(nn.Module):
         dropout: float = 0.3,
         max_length: int = 128,
         freeze_bert: bool = False,
+        pretrained: bool = True,
     ):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.projection_dim = projection_dim
         self.max_length = max_length
 
-        self.bert = AutoModel.from_pretrained(model_name, output_attentions=True)
+        # pretrained=False builds the architecture only (config download, no
+        # weights) — used when a fine-tuned checkpoint will be loaded on top.
+        # Eager attention: SDPA kernels do not return attention maps, which the
+        # text explanation needs.
+        if pretrained:
+            self.bert = AutoModel.from_pretrained(
+                model_name, output_attentions=True, attn_implementation="eager",
+            )
+        else:
+            bert_cfg = AutoConfig.from_pretrained(model_name, output_attentions=True)
+            self.bert = AutoModel.from_config(bert_cfg, attn_implementation="eager")
 
         if freeze_bert:
             for param in self.bert.parameters():
@@ -69,6 +80,13 @@ class TextEncoder(nn.Module):
     def get_token_features(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         hidden = self._encode(input_ids, attention_mask)
         return self.projection(hidden)
+
+    def encode(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """[CLS] embedding and per-token features from a single BERT pass."""
+        tokens = self.projection(self._encode(input_ids, attention_mask))
+        return tokens[:, 0, :], tokens
 
     def freeze_bert(self) -> None:
         for param in self.bert.parameters():

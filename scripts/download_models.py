@@ -1,4 +1,4 @@
-"""
+r"""
 Download trained model weights from Kaggle to the local models/ directory.
 
 Usage:
@@ -10,7 +10,6 @@ Requires the Kaggle API key to be configured:
 """
 
 import argparse
-import os
 import shutil
 from pathlib import Path
 

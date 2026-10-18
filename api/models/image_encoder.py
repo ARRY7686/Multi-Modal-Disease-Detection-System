@@ -11,6 +11,8 @@ Returns:
 
 from __future__ import annotations
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torchvision.models as tv_models
@@ -68,8 +70,22 @@ class ImageEncoder(nn.Module):
         return self.spatial_projection(spatial)
 
     # -----------------------------------------------------------------
+    def encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Pooled embedding and spatial tokens from a single backbone pass."""
+        feat = self.features(x)
+        pooled = self.projection(self.pool(feat).flatten(1))
+        b, c, h, w = feat.shape
+        spatial = self.spatial_projection(feat.permute(0, 2, 3, 1).reshape(b, h * w, c))
+        return pooled, spatial
+
+    # -----------------------------------------------------------------
     def get_feature_map(self, x: torch.Tensor) -> torch.Tensor:
         return self.features(x)
+
+    # -----------------------------------------------------------------
+    def gradcam_layer(self) -> nn.Module:
+        """Last conv block of the backbone (features is Sequential(backbone.features))."""
+        return self.features[0][-1]
 
     # -----------------------------------------------------------------
     def freeze_backbone(self) -> None:

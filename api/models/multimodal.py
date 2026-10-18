@@ -14,9 +14,9 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 
+from .fusion import CrossAttentionFusion
 from .image_encoder import ImageEncoder
 from .text_encoder import TextEncoder
-from .fusion import CrossAttentionFusion, ConcatFusion
 
 
 class MultiModalDetector(nn.Module):
@@ -80,12 +80,37 @@ class MultiModalDetector(nn.Module):
             "text_pooled": text_pooled,
         }
 
+    def forward_all(
+        self,
+        image: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Logits for all three modes from one pass through each backbone.
+
+        Used in training so every step supervises the fusion path and both
+        single-modality heads; inference uses forward(mode=...).
+        """
+        image_pooled, img_spatial = self.image_encoder.encode(image)
+        text_pooled, txt_tokens = self.text_encoder.encode(input_ids, attention_mask)
+        return {
+            "multimodal": self.fusion(img_spatial, txt_tokens, attention_mask),
+            "image_only": self.image_head(image_pooled),
+            "text_only": self.text_head(text_pooled),
+        }
+
     @classmethod
-    def from_config(cls, cfg) -> "MultiModalDetector":
-        """Construct from a Config object."""
+    def from_config(cls, cfg, pretrained: bool = True) -> "MultiModalDetector":
+        """
+        Construct from a Config object.
+
+        pretrained=False skips downloading ImageNet / BioBERT weights; use it
+        when a trained checkpoint is about to be loaded over the whole model.
+        """
         image_encoder = ImageEncoder(
             backbone_name=cfg.image_backbone,
-            pretrained=cfg.image_pretrained,
+            pretrained=pretrained and cfg.image_pretrained,
             feature_dim=cfg.image_feature_dim,
             projection_dim=cfg.projection_dim,
             dropout=cfg.dropout,
@@ -96,6 +121,7 @@ class MultiModalDetector(nn.Module):
             projection_dim=cfg.projection_dim,
             dropout=cfg.dropout,
             max_length=cfg.text_max_length,
+            pretrained=pretrained,
         )
         fusion = CrossAttentionFusion(
             dim=cfg.projection_dim,

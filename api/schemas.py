@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-
-# ── Request schemas ──────────────────────────────────────────────────────────
-
-class PredictionRequest(BaseModel):
-    symptoms: Optional[str] = Field(None, description="Patient symptom description")
-    modality: Optional[str] = Field(
-        None,
-        description="Image modality: 'chest', 'skin', 'brain', or 'auto'",
-    )
+Modality = Literal["chest", "skin", "brain"]
+Mode = Literal["image_only", "text_only", "multimodal"]
+ModalitySource = Literal["user", "classifier", "heuristic", "text"]
 
 
 # ── Response schemas ─────────────────────────────────────────────────────────
 
 class DiseaseScore(BaseModel):
     disease: str
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0,
+        description="Sigmoid output; temperature-scaled when the response says calibrated=true",
+    )
     label_index: int
+    threshold: float = Field(..., description="Decision threshold for this class")
+    positive: bool = Field(..., description="confidence >= threshold")
 
 
 class TokenImportance(BaseModel):
@@ -32,26 +31,42 @@ class TokenImportance(BaseModel):
 
 class Explanation(BaseModel):
     heatmap_base64: Optional[str] = Field(
-        None, description="Grad-CAM overlay as base64-encoded PNG"
+        None, description="Grad-CAM overlay for the top prediction, base64-encoded PNG"
+    )
+    heatmap_class: Optional[str] = Field(
+        None, description="Disease the Grad-CAM heatmap explains"
     )
     important_tokens: Optional[List[TokenImportance]] = Field(
-        None, description="Top-k tokens with importance scores"
+        None, description="Top-k words with importance scores"
     )
     highlighted_text: Optional[str] = Field(
-        None, description="Original text with important tokens bolded"
+        None, description="Original text with important words wrapped in **double asterisks**"
     )
 
 
 class PredictionResponse(BaseModel):
     predictions: List[DiseaseScore]
-    modality: str
-    mode: str = Field(..., description="'image_only', 'text_only', or 'multimodal'")
+    modality: Modality
+    modality_source: ModalitySource = Field(
+        ..., description="How the modality was chosen"
+    )
+    modality_confidence: Optional[float] = Field(
+        None, description="Modality-classifier softmax confidence, when it was used"
+    )
+    mode: Mode
     explanation: Optional[Explanation] = None
+    calibrated: bool = Field(
+        False, description="Scores were temperature-scaled on validation data for this mode"
+    )
+    inference_time_ms: float
+    warnings: List[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
-    status: str
-    models_loaded: Dict[str, bool]
+    status: Literal["ok", "degraded"]
+    models_loaded: Dict[str, bool] = Field(
+        ..., description="True only when trained weights were found and loaded"
+    )
 
 
 class LabelResponse(BaseModel):

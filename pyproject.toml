@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = [
+    # miniature validation/test splits in tests/test_training.py miss some classes
+    "ignore:y_pred contains classes not in y_true:UserWarning",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["kaggle_notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501", "B008"]  # FastAPI's File()/Form() defaults are the intended B008 pattern

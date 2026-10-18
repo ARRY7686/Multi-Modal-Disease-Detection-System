@@ -119,7 +119,7 @@ training:
 
   loss:
     type: "focal"              # "focal" | "bce_weighted"
-    focal_alpha: 0.25
+    focal_alpha: 0.75         # value used by the training notebooks
     focal_gamma: 2.0
 
 # ---------------------------------------------------------------------------
@@ -157,10 +157,18 @@ datasets:
 inference:
   device: "cpu"
   model_dir: "models"
+  # Fallback decision threshold; per-class thresholds saved by training in
+  # models/multimodal_config.json ("thresholds") take precedence.
   confidence_threshold: 0.5
   top_k_predictions: 5
-  gradcam_target_layer: "features.-1"
   text_top_k_tokens: 10
+  # Reject auto-detected images whose modality-classifier softmax confidence
+  # is below this (likely not a chest X-ray, dermoscopy image or brain MRI).
+  # The user can still force a modality explicitly.
+  min_modality_confidence: 0.6
+  # Warn when the checkpoint's recorded validation AUC for the requested
+  # mode (multimodal / image_only / text_only) is below this.
+  min_mode_val_auc: 0.7
 
 # ---------------------------------------------------------------------------
 # API Settings

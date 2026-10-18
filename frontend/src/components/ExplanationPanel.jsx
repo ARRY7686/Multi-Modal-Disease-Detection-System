@@ -14,13 +14,18 @@ export default function ExplanationPanel({ explanation }) {
           <h3 className="text-sm font-medium text-gray-600 mb-2">
             Highlighted Symptoms
           </h3>
-          <p
-            className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg"
-            dangerouslySetInnerHTML={{
-              __html: highlighted_text
-                .replace(/\*\*(.*?)\*\*/g, '<span class="bg-yellow-200 font-semibold px-0.5 rounded">$1</span>'),
-            }}
-          />
+          {/* Rendered as React text nodes (never as HTML): the text is user input. */}
+          <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+            {highlighted_text.split(/\*\*(.*?)\*\*/g).map((part, i) =>
+              i % 2 === 1 ? (
+                <span key={i} className="bg-yellow-200 font-semibold px-0.5 rounded">
+                  {part}
+                </span>
+              ) : (
+                part
+              )
+            )}
+          </p>
         </div>
       )}
 

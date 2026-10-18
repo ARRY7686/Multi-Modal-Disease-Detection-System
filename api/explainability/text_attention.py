@@ -4,21 +4,21 @@ Text attention explainability — extract token importance from BioBERT attentio
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import torch
-import numpy as np
+
+SPECIAL_TOKENS = ("[CLS]", "[SEP]", "[PAD]")
 
 
 def extract_token_importance(
     attention_weights: torch.Tensor,
     tokens: List[str],
     attention_mask: Optional[torch.Tensor] = None,
-    top_k: int = 10,
-    method: str = "cls_attention",
-) -> List[Dict[str, float]]:
+    top_k: Optional[int] = None,
+) -> List[Dict]:
     """
-    Extract per-token importance scores from BioBERT attention.
+    Per-token importance from [CLS] attention in BioBERT's last layer.
 
     Args:
         attention_weights: (B, seq, seq) — mean-pooled across heads
@@ -26,95 +26,69 @@ def extract_token_importance(
                            Stored in TextEncoder.last_attention_weights.
         tokens:            list of string tokens for the first sample
         attention_mask:    (B, seq) — 1 for real tokens, 0 for padding
-        top_k:             number of most important tokens to return
-        method:            "cls_attention" — use [CLS]→token attention
-                           "rollout"       — attention rollout (experimental)
+        top_k:             if given, keep only the k most important tokens.
+                           Leave as None when the result will be passed to
+                           merge_subword_importance(), which needs every
+                           token to reassemble WordPiece words correctly.
 
     Returns:
-        List of {"token": str, "importance": float} sorted descending.
+        List of {"token": str, "importance": float, "index": int} in
+        sequence order (or sorted by importance when top_k is given).
     """
-    # Work with first sample only (single inference)
-    attn = attention_weights[0]  # (seq, seq)
+    cls_attn = attention_weights[0, 0].float()  # [CLS] row: (seq,)
 
-    if method == "cls_attention":
-        # [CLS] is at position 0 — its attention over all tokens
-        cls_attn = attn[0]  # (seq,)
-    elif method == "rollout":
-        # Simple attention rollout: product of attention matrices
-        # For single-layer this is the same as cls_attention
-        cls_attn = attn[0]
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    # Mask padding tokens
     if attention_mask is not None:
-        mask = attention_mask[0].float()
-        cls_attn = cls_attn * mask
+        cls_attn = cls_attn * attention_mask[0].float()
 
-    # Normalise to [0, 1]
     cls_attn = cls_attn.cpu().numpy()
     if cls_attn.max() > 0:
         cls_attn = cls_attn / cls_attn.max()
 
-    # Build token→importance pairs, skip special tokens
-    results = []
-    for idx, (token, score) in enumerate(zip(tokens, cls_attn)):
-        # Skip [CLS], [SEP], [PAD] and subword continuation markers
-        if token in ("[CLS]", "[SEP]", "[PAD]"):
-            continue
-        results.append({
-            "token": token,
-            "importance": round(float(score), 4),
-            "index": idx,
-        })
+    results = [
+        {"token": token, "importance": float(score), "index": idx}
+        for idx, (token, score) in enumerate(zip(tokens, cls_attn, strict=True))
+        if token not in SPECIAL_TOKENS
+    ]
 
-    # Sort by importance
-    results.sort(key=lambda x: x["importance"], reverse=True)
-
-    return results[:top_k]
+    if top_k is not None:
+        results.sort(key=lambda x: x["importance"], reverse=True)
+        results = results[:top_k]
+    return results
 
 
-def merge_subword_importance(
-    token_importance: List[Dict],
-) -> List[Dict[str, float]]:
+def merge_subword_importance(token_importance: List[Dict]) -> List[Dict]:
     """
-    Merge WordPiece subword tokens (e.g. '##gia', '##nop') back into
-    full words and sum their importance scores.
+    Merge WordPiece subword tokens (e.g. 'dys', '##pnea') back into full
+    words, scoring each word by the mean of its pieces, then re-normalise
+    to [0, 1].
 
-    Args:
-        token_importance: output of extract_token_importance
+    A '##' piece is only attached to the token immediately before it in the
+    sequence, so passing a filtered list cannot glue pieces onto unrelated
+    words.
 
     Returns:
-        list of {"token": str, "importance": float} with merged subwords
+        list of {"token": str, "importance": float} sorted by importance
     """
-    merged: List[Dict] = []
-    current_word = ""
-    current_score = 0.0
+    words: List[Dict] = []
+    prev_index: Optional[int] = None
 
-    for item in sorted(token_importance, key=lambda x: x.get("index", 0)):
-        token = item["token"]
-        score = item["importance"]
-
-        if token.startswith("##"):
-            # Continuation of previous word
-            current_word += token[2:]
-            current_score += score
+    for item in sorted(token_importance, key=lambda x: x["index"]):
+        token, score, index = item["token"], item["importance"], item["index"]
+        contiguous = prev_index is not None and index == prev_index + 1
+        if token.startswith("##") and words and contiguous:
+            words[-1]["token"] += token[2:]
+            words[-1]["scores"].append(score)
         else:
-            # Save previous word
-            if current_word:
-                merged.append({
-                    "token": current_word,
-                    "importance": round(current_score, 4),
-                })
-            current_word = token
-            current_score = score
+            words.append({"token": token.removeprefix("##"), "scores": [score]})
+        prev_index = index
 
-    # Don't forget the last word
-    if current_word:
-        merged.append({
-            "token": current_word,
-            "importance": round(current_score, 4),
-        })
+    merged = [
+        {"token": w["token"], "importance": sum(w["scores"]) / len(w["scores"])}
+        for w in words
+    ]
+    peak = max((m["importance"] for m in merged), default=0.0)
+    for m in merged:
+        m["importance"] = round(m["importance"] / peak, 4) if peak > 0 else 0.0
 
     merged.sort(key=lambda x: x["importance"], reverse=True)
     return merged
@@ -129,25 +103,25 @@ def format_explanation(
     Create a structured explanation combining token importance with
     the original text.
 
+    Args:
+        token_importance: output of extract_token_importance(top_k=None)
+
     Returns:
         {
             "original_text": str,
             "important_tokens": [{"token": str, "importance": float}, ...],
-            "highlighted_text": str  (tokens wrapped in **bold**)
+            "highlighted_text": str  (important words wrapped in **bold**)
         }
     """
-    merged = merge_subword_importance(token_importance)[:top_k]
+    # Drop punctuation before merging so it cannot set the normalisation peak.
+    words_only = [t for t in token_importance if t["token"].removeprefix("##").isalnum()]
+    merged = merge_subword_importance(words_only)[:top_k]
     important_words = {item["token"].lower() for item in merged}
 
-    # Build highlighted text
-    words = original_text.split()
     highlighted = []
-    for word in words:
+    for word in original_text.split():
         clean_word = word.lower().strip(".,;:!?()[]\"'")
-        if clean_word in important_words:
-            highlighted.append(f"**{word}**")
-        else:
-            highlighted.append(word)
+        highlighted.append(f"**{word}**" if clean_word in important_words else word)
 
     return {
         "original_text": original_text,
