@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Lint
-        run: ruff check api utils tests scripts
+        run: ruff check api utils tests scripts training
       - name: Test
         run: pytest
 

@@ -2,6 +2,10 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+filterwarnings = [
+    # miniature validation/test splits in tests/test_training.py miss some classes
+    "ignore:y_pred contains classes not in y_true:UserWarning",
+]
 
 [tool.ruff]
 line-length = 110

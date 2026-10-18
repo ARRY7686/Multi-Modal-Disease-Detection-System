@@ -12,7 +12,7 @@ Also exposes `last_attention_weights` after each forward pass for explainability
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -80,6 +80,13 @@ class TextEncoder(nn.Module):
     def get_token_features(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         hidden = self._encode(input_ids, attention_mask)
         return self.projection(hidden)
+
+    def encode(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """[CLS] embedding and per-token features from a single BERT pass."""
+        tokens = self.projection(self._encode(input_ids, attention_mask))
+        return tokens[:, 0, :], tokens
 
     def freeze_bert(self) -> None:
         for param in self.bert.parameters():

@@ -204,10 +204,16 @@ multimodalAI/
 │           ├── HeatmapViewer.jsx     # Grad-CAM overlay with toggle
 │           └── ExplanationPanel.jsx  # Highlighted text + token importance
 │
-├── kaggle_notebooks/                 # Self-contained Kaggle training notebooks
-│   ├── image_training.ipynb          # Phase 1: EfficientNet-B4 + MobileNetV3
-│   ├── text_training.ipynb           # Phase 2: BioBERT fine-tuning
-│   └── multimodal_training.ipynb     # Phase 3: Cross-attention fusion
+├── training/                         # Honest training pipeline (imports api/models)
+│   ├── data.py                       # Loaders, patient-disjoint splits, metadata -> text
+│   ├── evaluate.py                   # Per-modality metrics, bootstrap CIs, calibration, thresholds
+│   └── train.py                      # python -m training.train: trains + writes every API artifact
+│
+├── kaggle_notebooks/
+│   ├── train_v2.ipynb                # Kaggle runner for training/train.py
+│   ├── image_training.ipynb          # Legacy v1 (label-leaking text, not patient-disjoint)
+│   ├── text_training.ipynb           # Legacy v1
+│   └── multimodal_training.ipynb     # Legacy v1
 │
 ├── configs/
 │   └── model_config.yaml             # Central config (architecture, labels, training)
@@ -276,52 +282,31 @@ cd ..
 
 ### Training on Kaggle
 
-Training is split into three sequential Kaggle notebooks, each designed for a **Kaggle GPU runtime** with **Internet enabled** (for downloading pretrained weights).
+Training lives in the `training/` package and imports the model code from `api/models`, so the
+weights it writes always load into the API. `kaggle_notebooks/train_v2.ipynb` is a thin runner:
+it clones this repository and calls the training script.
 
-#### Phase 1: Image Encoder (`image_training.ipynb`)
+1. Create a Kaggle notebook from `kaggle_notebooks/train_v2.ipynb`, with **GPU T4** and **Internet on**.
+2. Add the input datasets `nih-chest-xrays/data`, `kmader/skin-cancer-mnist-ham10000` and
+   `sartajbhuvaji/brain-tumor-classification-mri`.
+3. Run all (about 2.5 h with the defaults). Download `models.zip` and unzip it into `models/`.
 
-Trains the EfficientNet-B4 image encoder and MobileNetV3 modality classifier on three medical imaging datasets.
+The same script runs anywhere the datasets are on disk:
 
-**Kaggle datasets to add:**
-- `nih-chest-xrays/data` — NIH ChestX-ray14 (30% subset used via stratified sampling)
-- `kmader/skin-cancer-mnist-ham10000` — HAM10000 skin lesion dataset
-- `sartajbhuvaji/brain-tumor-classification-mri` — Brain Tumor Classification (MRI)
+```bash
+python -m training.train --data-root /path/to/datasets --out models \
+    --chest-train-fraction 0.3 --epochs 8
+python -m training.train --help   # every setting is a flag
+```
 
-**Training details:**
-- Frozen backbone: 5 epochs @ lr=1e-4
-- Unfrozen fine-tuning: 15 epochs @ lr=1e-5
-- Focal Loss (α=0.75, γ=2.0) with WeightedRandomSampler for class imbalance
-- Per-class threshold optimization on the validation set
+Outputs: `fusion_model_best.pth`, `modality_classifier.pth`, `tokenizer/`,
+`multimodal_config.json` (per-mode thresholds and temperatures, test results with confidence
+intervals, training history) and `results.md` (the tables for this README).
 
-**Outputs:** `image_encoder.pth`, `image_head.pth`, `modality_classifier.pth`
-
-#### Phase 2: Text Encoder (`text_training.ipynb`)
-
-Fine-tunes BioBERT on synthetic clinical symptom descriptions generated for all 25 diseases.
-
-**Kaggle datasets:** None required (generates 200 synthetic symptom descriptions per disease at runtime).
-
-**Training details:**
-- Frozen BERT: 3 epochs @ lr=2e-5
-- Unfrozen fine-tuning: 10 epochs @ lr=2e-5
-- Linear warmup + cosine decay scheduler
-
-**Outputs:** `text_encoder.pth`, `text_head.pth`
-
-#### Phase 3: Multimodal Fusion (`multimodal_training.ipynb`)
-
-Trains the cross-attention fusion module combining pre-trained encoders from Phases 1 and 2.
-
-**Kaggle datasets to add:**
-- Same image datasets as Phase 1
-- Upload Phase 1 & 2 outputs as a Kaggle dataset (e.g., `your-username/multimodal-pretrained-weights`)
-
-**Training details:**
-- Frozen encoders: 5 epochs (fusion lr=1e-4)
-- Unfrozen fine-tuning: 10 epochs (encoder lr=1e-6, fusion lr=1e-4)
-- Differential learning rates preserve pretrained features
-
-**Outputs:** `fusion_model_best.pth`, `fusion_model.pth`, `multimodal_config.json`, individual component files
+The original three-phase notebooks (`image_training.ipynb`, `text_training.ipynb`,
+`multimodal_training.ipynb`) are kept for reference only. They pair each image with symptom
+text generated from its own label and split without patient grouping, so their reported
+multimodal scores are not valid.
 
 ### Running Locally
 
@@ -344,7 +329,7 @@ BERT with a local vocabulary), so it needs no model downloads or trained weights
 ```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements-dev.txt
-ruff check api utils tests scripts
+ruff check api utils tests scripts training
 pytest
 ```
 
@@ -431,12 +416,13 @@ Full cross-attention multimodal inference. Requires both inputs.
     ],
     "highlighted_text": "Patient presents with bilateral **consolidation**..."
   },
+  "calibrated": true,
   "inference_time_ms": 1840.2,
   "warnings": []
 }
 ```
 
-- `confidence` is the raw sigmoid output, not a calibrated probability. `positive` compares it with the class's decision threshold, read from `"thresholds"` in `models/multimodal_config.json` when training saved them (a list, or `{mode: list}`), else `inference.confidence_threshold`.
+- `confidence` is the sigmoid output, temperature-scaled per mode when `calibrated` is true (temperatures are fitted on validation by `training/train.py` and saved as `"temperatures"` in `multimodal_config.json`). `positive` compares it with the class's decision threshold, read from `"thresholds"` in `models/multimodal_config.json` when training saved them (a list, or `{mode: list}`), else `inference.confidence_threshold`.
 - `warnings` flags results to distrust: no trained weights found, or a mode whose recorded validation AUC in `multimodal_config.json` is below `min_mode_val_auc` (the current checkpoint's image-only and text-only heads score AUC 0.46 and 0.58).
 - `/health` returns `"degraded"`, with `false` entries in `models_loaded`, when checkpoint files are missing or do not cover every parameter.
 
@@ -567,28 +553,31 @@ Attention-based importance scoring from BioBERT's self-attention layers.
 ## Training Pipeline
 
 ```
-Phase 1: Image                  Phase 2: Text                  Phase 3: Fusion
-┌─────────────────────┐   ┌─────────────────────┐   ┌──────────────────────────┐
-│                     │   │                     │   │                          │
-│  NIH ChestX-ray14   │   │  Synthetic symptom   │   │  Frozen encoders (5 ep)  │
-│  HAM10000            │   │  descriptions (200   │   │  ↓                       │
-│  Brain Tumor MRI     │   │  per disease × 25)   │   │  Unfrozen fine-tune w/   │
-│  ↓                   │   │  ↓                   │   │  differential LR (10 ep) │
-│  EfficientNet-B4     │   │  BioBERT v1.1        │   │  ↓                       │
-│  + MobileNetV3       │   │  fine-tuning         │   │  Cross-attention fusion   │
-│  ↓                   │   │  ↓                   │   │  ↓                       │
-│  image_encoder.pth   │   │  text_encoder.pth    │   │  fusion_model_best.pth   │
-│  modality_clf.pth    │   │  text_head.pth       │   │  multimodal_config.json  │
-│                     │   │                     │   │                          │
-└─────────────────────┘   └─────────────────────┘   └──────────────────────────┘
-         ↑ Kaggle GPU (T4/P100)                              ↑ Requires Phase 1+2 outputs
+NIH ChestX-ray14 ─┐  official patient-disjoint test list; validation split by Patient ID;
+                  │  text = age, sex, PA/AP view; "No Finding" X-rays kept
+HAM10000 ─────────┤  split by lesion_id; text = age, sex, lesion site (dx_type unused: it encodes the label)
+Brain Tumor MRI ──┘  official Testing folder minus duplicates of Training; text = "No clinical details provided."
+        │
+        ▼
+EfficientNet-B4 ──┬── image head ──────────────► image-only logits      ┐
+                  └── spatial tokens ─┐                                 │  masked BCE on each
+                          cross-attention fusion ──► multimodal logits  ├─ sample's own modality,
+BioBERT ──────────┬── token features ─┘                                 │  all three heads every step
+                  └── text head ───────────────► text-only logits       ┘
+        │
+        ▼
+best epoch by validation AUROC → temperatures + per-class thresholds fitted on validation
+        → test set evaluated once (bootstrap 95% CIs, ECE) → artifacts the API loads
 ```
 
-**Loss function:** Focal Loss (`α=0.75, γ=2.0`) — addresses extreme class imbalance (chest X-ray Hernia class has only ~0.16% prevalence).
-
-**Data balancing:** WeightedRandomSampler ensures underrepresented modalities and diseases are seen proportionally during training.
-
-**Threshold optimization:** Per-class sigmoid thresholds are optimized on the validation set to maximize F1 score (rather than using a fixed 0.5 threshold).
+- **No label leakage:** the paired text is recorded patient metadata, never derived from the
+  diagnosis. A test (`tests/test_training.py`) checks that no label word appears in any paired text.
+- **Missing-modality robustness:** in training, the text is replaced by "No clinical details
+  provided." 20% of the time, so the model works without it and the placeholder is not a
+  give-away for brain scans.
+- **Sampling:** modality share proportional to the square root of its size (`--sampling-power 0.5`).
+- **Schedule:** 1 epoch with frozen backbones, then full fine-tuning with AdamW and warmup + cosine
+  (head 3e-4, EfficientNet 1e-4, BioBERT 2e-5), mixed precision on GPU.
 
 ---
 

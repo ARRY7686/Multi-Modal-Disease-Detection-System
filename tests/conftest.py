@@ -29,6 +29,10 @@ VOCAB = [
     "[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]",
     "a", "patient", "with", "fever", "cough", "and", "dys", "##pnea",
     "mole", "irregular", "borders", "headache", "seizures", "year", "old",
+    # metadata text rendered by training/data.py
+    "male", "female", "pa", "ap", "chest", "radiograph", "lesion", "on", "the",
+    "no", "clinical", "details", "provided",
+    "back", "face", "scalp", "hand", "foot", "abdomen",
     "-", ".", ",",
 ]
 

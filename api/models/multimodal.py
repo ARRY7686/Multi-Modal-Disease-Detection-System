@@ -80,6 +80,26 @@ class MultiModalDetector(nn.Module):
             "text_pooled": text_pooled,
         }
 
+    def forward_all(
+        self,
+        image: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Logits for all three modes from one pass through each backbone.
+
+        Used in training so every step supervises the fusion path and both
+        single-modality heads; inference uses forward(mode=...).
+        """
+        image_pooled, img_spatial = self.image_encoder.encode(image)
+        text_pooled, txt_tokens = self.text_encoder.encode(input_ids, attention_mask)
+        return {
+            "multimodal": self.fusion(img_spatial, txt_tokens, attention_mask),
+            "image_only": self.image_head(image_pooled),
+            "text_only": self.text_head(text_pooled),
+        }
+
     @classmethod
     def from_config(cls, cfg, pretrained: bool = True) -> "MultiModalDetector":
         """
