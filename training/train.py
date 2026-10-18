@@ -63,6 +63,7 @@ class TrainSettings:
     chest_test_fraction: float = 1.0      # fraction of NIH official-test patients
     val_fraction: float = 0.1
     skin_test_fraction: float = 0.15
+    brain_test_fraction: float = 0.15
 
     epochs: int = 8
     frozen_epochs: int = 1                # backbones frozen, heads + fusion warm up
@@ -127,7 +128,7 @@ def load_splits(cfg: Config, s: TrainSettings) -> Dict[str, List[D.Record]]:
     parts = [
         D.load_nih(cfg, roots["chest"], s.chest_train_fraction, s.chest_test_fraction, s.val_fraction, s.seed),
         D.load_ham10000(cfg, roots["skin"], s.skin_test_fraction, s.val_fraction, s.seed),
-        D.load_brain_mri(cfg, roots["brain"], s.val_fraction, s.seed),
+        D.load_brain_mri(cfg, roots["brain"], s.brain_test_fraction, s.val_fraction, s.seed),
     ]
     splits = {split: [r for p in parts for r in p[split]] for split in D.SPLITS}
     D.assert_disjoint(splits)
@@ -291,7 +292,7 @@ def results_markdown(cfg: Config, test: Dict[str, Dict], counts: Dict, modality_
         "# Evaluation results",
         "",
         "Held-out test sets: NIH ChestX-ray14 official test list (patient-disjoint), HAM10000 "
-        "lesion-grouped hold-out, Brain MRI official Testing folder (training duplicates removed). "
+        "lesion-grouped hold-out, Brain MRI duplicate-grouped re-split of Training+Testing. "
         "Temperatures and thresholds were fitted on validation only. 95% bootstrap CIs in brackets.",
         "",
         "| Mode | Chest macro AUROC | Skin balanced acc. | Skin macro AUROC | Brain accuracy | Brain macro AUROC | ECE raw → calibrated |",
@@ -447,7 +448,8 @@ def main(argv=None) -> Dict:
         "evaluation_protocol": {
             "chest": "NIH official test_list.txt (patient-disjoint); validation split by Patient ID",
             "skin": "HAM10000 split by lesion_id (StratifiedGroupKFold); dx_type not used",
-            "brain": "official Testing folder, exact dHash duplicates of Training removed",
+            "brain": "Training+Testing pooled, dHash duplicate clusters kept within one split "
+                     "(StratifiedGroupKFold); official Testing is 65% copies of Training",
             "text": "real metadata only (age, sex, view position / lesion site), never the label",
         },
         "data_counts": counts,

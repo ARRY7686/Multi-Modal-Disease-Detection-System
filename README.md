@@ -289,7 +289,7 @@ it clones this repository and calls the training script.
 1. Create a Kaggle notebook from `kaggle_notebooks/train_v2.ipynb`, with **GPU T4** and **Internet on**.
 2. Add the input datasets `nih-chest-xrays/data`, `kmader/skin-cancer-mnist-ham10000` and
    `sartajbhuvaji/brain-tumor-classification-mri`.
-3. Run all (about 2.5 h with the defaults). Download `models.zip` and unzip it into `models/`.
+3. Run all (about 3-3.5 h on a T4 with the defaults). Download `models.zip` and unzip it into `models/`.
 
 The same script runs anywhere the datasets are on disk:
 
@@ -556,7 +556,7 @@ Attention-based importance scoring from BioBERT's self-attention layers.
 NIH ChestX-ray14 ─┐  official patient-disjoint test list; validation split by Patient ID;
                   │  text = age, sex, PA/AP view; "No Finding" X-rays kept
 HAM10000 ─────────┤  split by lesion_id; text = age, sex, lesion site (dx_type unused: it encodes the label)
-Brain Tumor MRI ──┘  official Testing folder minus duplicates of Training; text = "No clinical details provided."
+Brain Tumor MRI ──┘  Training+Testing re-split with duplicate images grouped; text = "No clinical details provided."
         │
         ▼
 EfficientNet-B4 ──┬── image head ──────────────► image-only logits      ┐

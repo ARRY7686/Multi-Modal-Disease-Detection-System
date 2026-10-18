@@ -10,8 +10,9 @@ Two rules the original notebooks broke, enforced here:
    decided by the diagnosis itself.
 2. **Patient-disjoint splits.** NIH uses its official patient-disjoint
    test list and splits validation by Patient ID; HAM10000 is split by
-   `lesion_id` (several photos per lesion); brain MRI uses the dataset's
-   official Testing folder, with near-duplicates of training images removed.
+   `lesion_id` (several photos per lesion); brain MRI is re-split with
+   duplicate images grouped, because the official Testing folder is mostly
+   copies of Training images (see load_brain_mri).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from sklearn.model_selection import StratifiedGroupKFold, train_test_split
+from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import Dataset
 
 from api.config import Config
@@ -266,10 +267,20 @@ def dhash(path: str, size: int = 8) -> int:
 def load_brain_mri(
     cfg: Config,
     root: Path,
+    test_fraction: float = 0.15,
     val_fraction: float = 0.1,
     seed: int = 42,
 ) -> Dict[str, List[Record]]:
-    """Brain tumour MRI: official Training/Testing folders, cross-split duplicates removed."""
+    """
+    Brain tumour MRI, re-split so that duplicates never cross splits.
+
+    The official Training/Testing split of the Sartaj dataset is not usable
+    as a test set: 255 of its 394 test images are (re-encoded) copies of
+    training images, including every `no_tumor` test image. Both folders are
+    pooled, images are grouped by dHash (equal hash = visually identical),
+    and a stratified group split keeps each duplicate cluster in one split.
+    Clusters whose copies carry different labels are dropped.
+    """
     train_dir = find_path(root, r"Training", want_dir=True)
     test_dir = find_path(root, r"Testing", want_dir=True)
     if train_dir is None or test_dir is None:
@@ -286,22 +297,26 @@ def load_brain_mri(
                     items.append((str(f), label))
         return items
 
-    train_items, test_items = scan(train_dir), scan(test_dir)
-    train_hashes = {dhash(p) for p, _ in train_items}
-    deduped = [(p, lab) for p, lab in test_items if dhash(p) not in train_hashes]
-    if len(deduped) < len(test_items):
-        logger.info("Brain MRI: dropped %d test images duplicated in Training", len(test_items) - len(deduped))
+    items = scan(train_dir) + scan(test_dir)
+    hashes = [dhash(p) for p, _ in items]
 
-    tr, va = train_test_split(
-        train_items, test_size=val_fraction, random_state=seed, stratify=[lab for _, lab in train_items],
+    labels_per_cluster: Dict[int, set] = {}
+    for h, (_, lab) in zip(hashes, items, strict=True):
+        labels_per_cluster.setdefault(h, set()).add(lab)
+    conflicting = {h for h, labs in labels_per_cluster.items() if len(labs) > 1}
+    keep = [i for i, h in enumerate(hashes) if h not in conflicting]
+    n_dup = len(items) - len(labels_per_cluster)
+    logger.info(
+        "Brain MRI: %d images, %d duplicate copies grouped, %d images dropped for conflicting labels",
+        len(items), n_dup, len(items) - len(keep),
     )
-    records: Dict[str, List[Record]] = {}
-    for split, items in (("train", tr), ("val", va), ("test", deduped)):
-        records[split] = [
-            # No patient IDs in this dataset; file names repeat across folders, so key by path
-            Record(p, _label_vector(cfg, [lab]), "brain", NO_DETAILS, f"brain-{p}")
-            for p, lab in items
-        ]
+
+    items = [items[i] for i in keep]
+    groups = [f"brain-{hashes[i]:016x}" for i in keep]
+    split_of = _grouped_split([lab for _, lab in items], groups, test_fraction, val_fraction, seed)
+    records: Dict[str, List[Record]] = {s: [] for s in SPLITS}
+    for (p, lab), group, split in zip(items, groups, split_of, strict=True):
+        records[split].append(Record(p, _label_vector(cfg, [lab]), "brain", NO_DETAILS, group))
     return records
 
 
