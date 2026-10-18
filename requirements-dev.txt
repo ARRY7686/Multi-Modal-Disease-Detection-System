@@ -1,0 +1,5 @@
+# Test and lint tooling (CI installs CPU-only torch first, then this file)
+-r api/requirements.txt
+pytest>=8.0
+httpx>=0.27
+ruff>=0.6

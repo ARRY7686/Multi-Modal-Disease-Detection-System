@@ -6,6 +6,7 @@
 
 Combines **medical image analysis** (chest X-rays, dermoscopy, brain MRI) with **clinical symptom text understanding** (BioBERT) via **bidirectional cross-attention fusion** for 25-class multi-label diagnosis with full visual and textual explainability.
 
+[![CI](https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System/actions/workflows/ci.yml/badge.svg)](https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -104,6 +105,15 @@ graph TB
 
 ## Model Performance
 
+> [!WARNING]
+> **The multimodal numbers below are inflated and are being replaced.** In the current
+> training notebooks each image's symptom text is generated *from that image's ground-truth
+> label*, in training and in validation, so the fusion model can read the diagnosis out of the
+> text. This is why skin and brain score a perfect 1.000 while the image encoder alone reaches
+> macro F1 0.42. The splits are also not patient-disjoint (NIH patients, HAM10000 `lesion_id`).
+> A model retrained on real paired patient data with patient-level splits is in progress; until
+> then, treat the image-encoder row as the only meaningful result.
+
 ### Multimodal Fusion (Cross-Attention)
 
 | Metric | Score |
@@ -145,7 +155,7 @@ Multimodal fusion training converged over 15 epochs (5 frozen + 10 unfrozen):
 |-------------|----------|----------|---------|
 | 0–13 | **Chest X-ray** | Atelectasis, Cardiomegaly, Effusion, Infiltration, Mass, Nodule, Pneumonia, Pneumothorax, Consolidation, Edema, Emphysema, Fibrosis, Pleural Thickening, Hernia | NIH ChestX-ray14 |
 | 14–20 | **Skin (Dermoscopy)** | Melanoma, Melanocytic Nevi, Basal Cell Carcinoma, Actinic Keratosis, Benign Keratosis, Dermatofibroma, Vascular Lesion | HAM10000 |
-| 21–24 | **Brain MRI** | Glioma, Meningioma, Pituitary Tumor, No Tumor | Brain Tumor MRI |
+| 21–24 | **Brain MRI** | Glioma, Meningioma, Pituitary Tumor, No Tumor | Brain Tumor Classification (MRI) |
 
 ---
 
@@ -155,7 +165,8 @@ Multimodal fusion training converged over 15 epochs (5 frozen + 10 unfrozen):
 multimodalAI/
 ├── api/                              # FastAPI backend
 │   ├── __init__.py
-│   ├── main.py                       # App entry point, endpoints, model loading
+│   ├── main.py                       # FastAPI app factory + endpoints (thin HTTP layer)
+│   ├── service.py                    # InferenceService: model loading, routing, prediction, explanations
 │   ├── schemas.py                    # Pydantic request/response models
 │   ├── config.py                     # YAML config loader (singleton pattern)
 │   ├── requirements.txt              # Python dependencies
@@ -223,6 +234,11 @@ multimodalAI/
 │   ├── download_models.py            # Download weights from Kaggle
 │   └── setup.sh                      # One-command project setup
 │
+├── tests/                            # pytest suite on tiny offline models (no downloads)
+├── .github/workflows/ci.yml          # Lint + tests + frontend build on every push / PR
+├── pyproject.toml                    # pytest + ruff configuration
+├── requirements-dev.txt              # Test / lint dependencies
+│
 ├── .gitignore
 └── README.md
 ```
@@ -269,7 +285,7 @@ Trains the EfficientNet-B4 image encoder and MobileNetV3 modality classifier on 
 **Kaggle datasets to add:**
 - `nih-chest-xrays/data` — NIH ChestX-ray14 (30% subset used via stratified sampling)
 - `kmader/skin-cancer-mnist-ham10000` — HAM10000 skin lesion dataset
-- `masoudnickparvar/brain-tumor-mri-dataset` — Brain Tumor MRI
+- `sartajbhuvaji/brain-tumor-classification-mri` — Brain Tumor Classification (MRI)
 
 **Training details:**
 - Frozen backbone: 5 epochs @ lr=1e-4
@@ -320,6 +336,20 @@ npm run dev
 
 Open **http://localhost:5173** in your browser.
 
+### Running Tests
+
+The test suite builds the same architecture at toy size (EfficientNet-B0 at 64 px, a 2-layer
+BERT with a local vocabulary), so it needs no model downloads or trained weights:
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-dev.txt
+ruff check api utils tests scripts
+pytest
+```
+
+CI runs the same commands, plus `npm run build` for the frontend, on every push and pull request.
+
 On first startup, the API will download **EfficientNet-B4** (~75 MB) and **BioBERT** (~433 MB) pretrained weights from PyTorch Hub and HuggingFace respectively. These are cached for subsequent runs.
 
 ---
@@ -346,6 +376,17 @@ Accepts any combination of image and/or symptoms. Auto-detects the inference mod
 | `symptoms` | string | No | Clinical symptom description |
 | `modality` | string | No | `"chest"`, `"skin"`, `"brain"`, or `"auto"` (default: auto-detect) |
 
+**How the modality is chosen** (reported as `modality_source`):
+
+| Inputs | Source | Behaviour |
+|--------|--------|-----------|
+| `modality` given | `user` | Used as-is |
+| Image, auto | `classifier` | MobileNetV3 modality classifier. Below `min_modality_confidence` (0.6) the request is rejected with **422**, so out-of-scope images do not get a diagnosis |
+| Image, auto, no classifier weights | `heuristic` | Colour-statistics fallback |
+| Text only, auto | `text` | Modality of the text model's top-scoring label |
+
+**Errors:** `400` missing or invalid input or unreadable image, `413` upload over `max_upload_size_mb`, `422` image not recognised as a supported modality.
+
 ### `POST /predict-multimodal`
 
 Full cross-attention multimodal inference. Requires both inputs.
@@ -365,26 +406,39 @@ Full cross-attention multimodal inference. Requires both inputs.
     {
       "disease": "Infiltration",
       "confidence": 0.7512,
-      "label_index": 3
+      "label_index": 3,
+      "threshold": 0.35,
+      "positive": true
     },
     {
       "disease": "Pneumonia",
-      "confidence": 0.5341,
-      "label_index": 6
+      "confidence": 0.2341,
+      "label_index": 6,
+      "threshold": 0.4,
+      "positive": false
     }
   ],
   "modality": "chest",
+  "modality_source": "classifier",
+  "modality_confidence": 0.9931,
   "mode": "multimodal",
   "explanation": {
-    "heatmap_base64": "data:image/png;base64,...",
+    "heatmap_base64": "iVBORw0KGgo...",
+    "heatmap_class": "Infiltration",
     "important_tokens": [
       { "token": "consolidation", "importance": 1.0 },
       { "token": "infection", "importance": 0.87 }
     ],
-    "highlighted_text": "Patient presents with bilateral <b>consolidation</b>..."
-  }
+    "highlighted_text": "Patient presents with bilateral **consolidation**..."
+  },
+  "inference_time_ms": 1840.2,
+  "warnings": []
 }
 ```
+
+- `confidence` is the raw sigmoid output, not a calibrated probability. `positive` compares it with the class's decision threshold, read from `"thresholds"` in `models/multimodal_config.json` when training saved them (a list, or `{mode: list}`), else `inference.confidence_threshold`.
+- `warnings` flags results to distrust: no trained weights found, or a mode whose recorded validation AUC in `multimodal_config.json` is below `min_mode_val_auc` (the current checkpoint's image-only and text-only heads score AUC 0.46 and 0.58).
+- `/health` returns `"degraded"`, with `false` entries in `models_loaded`, when checkpoint files are missing or do not cover every parameter.
 
 ### Example: cURL
 
@@ -495,8 +549,9 @@ MobileNetV3-Small (pretrained on ImageNet)
 
 Gradient-weighted Class Activation Mapping applied to the last convolutional block of EfficientNet-B4.
 
-- **Target layer:** Last convolutional block (`features[0][-1]`)
-- **Process:** Forward pass → compute gradients for the top predicted class → weight feature maps by mean gradients → ReLU → upsample to input resolution
+- **Target layer:** Last convolutional block (`ImageEncoder.gradcam_layer()`, i.e. `features[0][-1]`)
+- **Process:** Re-run the *same* path that produced the prediction (image head in image-only mode, cross-attention fusion in multimodal mode) → differentiate the top predicted disease's logit with respect to the target layer's activations → weight feature maps by mean gradients → ReLU → upsample to the original image size
+- Gradients are taken with `torch.autograd.grad` on the activation only, so no parameter `.grad` buffers build up across requests
 - **Output:** Semi-transparent heatmap overlaid on the original image, encoded as base64 PNG
 
 ### Token Importance (Text)
@@ -504,7 +559,7 @@ Gradient-weighted Class Activation Mapping applied to the last convolutional blo
 Attention-based importance scoring from BioBERT's self-attention layers.
 
 - **Process:** Extract attention weights from the last BERT layer → average across heads → take [CLS] token's attention over all tokens → normalize to [0, 1]
-- **Subword merging:** WordPiece subword scores are aggregated (mean) for display
+- **Subword merging:** WordPiece pieces are merged over the full sequence (a `##` piece only joins the token directly before it) and scored by their mean; punctuation is dropped, then scores are renormalised and cut to the top-k words
 - **Output:** Top-K important tokens with scores + full text with important tokens bolded in HTML
 
 ---
@@ -548,7 +603,7 @@ All architecture, training, and inference settings are centralized in `configs/m
 | **Text encoder** | `model_name: dmis-lab/biobert-v1.1`, `max_length: 128`, `hidden_dim: 768` |
 | **Fusion** | `type: cross_attention`, `num_heads: 8`, `num_cross_layers: 2` |
 | **Labels** | 25 diseases mapped to [0,14), [14,21), [21,25) index ranges |
-| **Inference** | `device: cpu`, `top_k_predictions: 5`, `confidence_threshold: 0.5` |
+| **Inference** | `device: cpu`, `top_k_predictions: 5`, `confidence_threshold: 0.5`, `min_modality_confidence: 0.6`, `min_mode_val_auc: 0.7` |
 | **API** | `port: 8000`, `cors_origins: [localhost:5173, localhost:3000]`, `max_upload_size_mb: 50` |
 
 ---
@@ -576,7 +631,7 @@ All architecture, training, and inference settings are centralized in `configs/m
 |---------|------|---------|----------|--------|
 | [NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data) | 45.1 GB (30% used) | 14 | Chest X-ray | NIH Clinical Center |
 | [HAM10000](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000) | 2.9 GB | 7 | Dermoscopy | ISIC Archive |
-| [Brain Tumor MRI](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) | 93 MB | 4 | Brain MRI | Figshare |
+| [Brain Tumor Classification (MRI)](https://www.kaggle.com/datasets/sartajbhuvaji/brain-tumor-classification-mri) | ~90 MB | 4 | Brain MRI | Kaggle |
 | Synthetic Symptoms | Generated at runtime | 25 | Clinical text | GPT-generated templates × 200/disease |
 
 ---
