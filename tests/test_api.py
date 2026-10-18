@@ -47,18 +47,29 @@ def test_labels_lists_25_classes(client):
 
 # ── Modality routing ─────────────────────────────────────────────────────────
 
-def test_text_only_is_routed_by_text_model_not_defaulted_to_chest(client, service):
+def test_text_only_is_routed_by_the_texts_wording(client, service):
+    # The top score overall is a skin label, as with a real checkpoint (HAM10000 is mostly
+    # nevi), but scores of different modalities are not comparable: the text decides.
     logits = [-5.0] * 25
     logits[MELANOMA] = 5.0
     set_logits(service.model.text_head, logits)
 
-    body = client.post("/predict", data={"symptoms": "a mole with irregular borders"}).json()
+    chest = client.post("/predict", data={"symptoms": "62-year-old male. PA chest radiograph."}).json()
+    skin = client.post("/predict", data={"symptoms": "a mole with irregular borders"}).json()
 
-    assert body["mode"] == "text_only"
-    assert body["modality"] == "skin"
-    assert body["modality_source"] == "text"
-    assert body["predictions"][0]["disease"] == "Melanoma"
-    assert label_indices(body) <= set(SKIN)
+    assert chest["mode"] == "text_only"
+    assert (chest["modality"], chest["modality_source"]) == ("chest", "text")
+    assert label_indices(chest) <= set(CHEST)
+    assert skin["modality"] == "skin"
+    assert skin["predictions"][0]["disease"] == "Melanoma"
+    assert label_indices(skin) <= set(SKIN)
+
+
+def test_text_only_without_a_modality_cue_asks_for_one(client):
+    for text in ["fever and fatigue", "chest pain and a new mole"]:
+        response = client.post("/predict", data={"symptoms": text})
+        assert response.status_code == 422
+        assert "Choose the modality" in response.json()["detail"]
 
 
 def test_explicit_modality_overrides_detection(client):
@@ -123,7 +134,7 @@ def test_thresholds_from_training_metadata(tiny_cfg):
     metadata = {"thresholds": {"text_only": [0.0] * 25}}
     svc = build_service(tiny_cfg, metadata=metadata)
     with TestClient(create_app(service=svc, cfg=tiny_cfg)) as client:
-        text = client.post("/predict", data={"symptoms": "fever"}).json()
+        text = client.post("/predict", data={"symptoms": "fever and cough"}).json()
         image = client.post("/predict", files=image_file()).json()
 
     assert all(p["threshold"] == 0.0 and p["positive"] for p in text["predictions"])
