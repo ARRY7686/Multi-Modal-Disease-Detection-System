@@ -17,7 +17,7 @@ class DiseaseScore(BaseModel):
     disease: str
     confidence: float = Field(
         ..., ge=0.0, le=1.0,
-        description="Sigmoid output of the model (not a calibrated probability)",
+        description="Sigmoid output; temperature-scaled when the response says calibrated=true",
     )
     label_index: int
     threshold: float = Field(..., description="Decision threshold for this class")
@@ -55,6 +55,9 @@ class PredictionResponse(BaseModel):
     )
     mode: Mode
     explanation: Optional[Explanation] = None
+    calibrated: bool = Field(
+        False, description="Scores were temperature-scaled on validation data for this mode"
+    )
     inference_time_ms: float
     warnings: List[str] = Field(default_factory=list)
 

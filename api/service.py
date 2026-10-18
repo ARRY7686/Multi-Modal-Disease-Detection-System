@@ -166,6 +166,12 @@ class InferenceService:
             for mode, res in metadata.get("training_results", {}).items()
             if mode in MODES and isinstance(res, dict) and res.get("auc")
         }
+        # Temperature scaling fitted on validation by training (logits / T).
+        self.temperatures: Dict[str, float] = {
+            mode: float(t)
+            for mode, t in metadata.get("temperatures", {}).items()
+            if mode in MODES and float(t) > 0
+        }
 
         self.grad_cam = GradCAM(self.model.image_encoder.gradcam_layer())
         # The model keeps per-request state (attention maps, Grad-CAM
@@ -288,8 +294,9 @@ class InferenceService:
                 image=img_tensor, input_ids=input_ids, attention_mask=attention_mask, mode=mode,
             )["logits"]
 
+        temperature = self.temperatures.get(mode, 1.0)
         with torch.no_grad():
-            probs = torch.sigmoid(logit_fn())[0].cpu().numpy()
+            probs = torch.sigmoid(logit_fn() / temperature)[0].cpu().numpy()
 
         if modality_source == "text":
             # No image and no hint: use the modality of the text model's top label.
@@ -318,14 +325,16 @@ class InferenceService:
             modality_confidence=modality_confidence,
             mode=mode,
             explanation=explanation,
+            calibrated=mode in self.temperatures,
             inference_time_ms=0.0,
             warnings=warnings,
         )
 
     def _mode_warnings(self, mode: str) -> List[str]:
-        warnings = []
         if not self.weights_loaded.get("fusion_model", False):
-            warnings.append("Trained weights were not found; predictions come from an untrained model.")
+            # Recorded validation results describe a checkpoint that is not loaded.
+            return ["Trained weights were not found; predictions come from an untrained model."]
+        warnings = []
         auc = self.mode_val_auc.get(mode)
         if auc is not None and auc < self.cfg.min_mode_val_auc:
             warnings.append(

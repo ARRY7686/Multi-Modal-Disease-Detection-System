@@ -100,8 +100,10 @@ export default function PredictionResults({ result }) {
             </div>
           ))}
           <p className="text-[11px] text-gray-400 pt-1">
-            Scores are uncalibrated model outputs. The tick on each bar marks that class&apos;s
-            decision threshold.
+            {result.calibrated
+              ? 'Scores are temperature-calibrated on validation data.'
+              : 'Scores are uncalibrated model outputs.'}{' '}
+            The tick on each bar marks that class&apos;s decision threshold.
           </p>
         </div>
       ) : (
