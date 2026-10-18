@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HeatmapViewer({ heatmapBase64, originalImage }) {
+export default function HeatmapViewer({ heatmapBase64, heatmapClass, originalImage }) {
   const [showHeatmap, setShowHeatmap] = useState(true)
 
   if (!heatmapBase64) return null
@@ -30,7 +30,8 @@ export default function HeatmapViewer({ heatmapBase64, originalImage }) {
         </div>
       </div>
       <p className="text-xs text-gray-400 mt-2">
-        Red regions indicate areas the model focused on for its prediction.
+        Red regions pushed the model towards
+        {heatmapClass ? <strong> {heatmapClass.replace(/_/g, ' ')}</strong> : ' its top prediction'}.
       </p>
     </div>
   )

@@ -52,7 +52,10 @@ export default function App() {
       }
       setResult(data)
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Prediction failed.')
+      const detail = err.response?.data?.detail
+      // FastAPI validation errors return a list of {loc, msg} objects
+      const message = Array.isArray(detail) ? detail.map((d) => d.msg).join('; ') : detail
+      setError(message || err.message || 'Prediction failed.')
     } finally {
       setLoading(false)
     }
@@ -64,6 +67,7 @@ export default function App() {
     setSymptoms('')
     setModality('auto')
     setResult(null)
+    setError(null)
   }
 
   return (
@@ -187,10 +191,18 @@ export default function App() {
           <div className="space-y-6">
             {result && (
               <>
+                {result.warnings?.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-sm space-y-1">
+                    {result.warnings.map((w, i) => (
+                      <p key={i}>{w}</p>
+                    ))}
+                  </div>
+                )}
                 <PredictionResults result={result} />
                 {result.explanation?.heatmap_base64 && (
                   <HeatmapViewer
                     heatmapBase64={result.explanation.heatmap_base64}
+                    heatmapClass={result.explanation.heatmap_class}
                     originalImage={imagePreview}
                   />
                 )}
