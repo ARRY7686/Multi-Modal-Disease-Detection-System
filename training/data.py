@@ -288,11 +288,11 @@ def load_brain_mri(
 
     def scan(folder: Path):
         items = []
-        for cls_dir in sorted(p for p in folder.iterdir() if p.is_dir()):
+        for cls_dir in sorted((p for p in folder.iterdir() if p.is_dir()), key=lambda p: p.name):
             label = BRAIN_CLASSES.get(cls_dir.name.lower())
             if label is None:
                 continue
-            for f in sorted(cls_dir.iterdir()):
+            for f in sorted(cls_dir.iterdir(), key=lambda p: p.name):
                 if f.suffix.lower() in (".jpg", ".jpeg", ".png"):
                     items.append((str(f), label))
         return items

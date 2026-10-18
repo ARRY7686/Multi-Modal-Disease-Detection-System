@@ -17,21 +17,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 
 EXPECTED_FILES = [
-    "image_encoder.pth",
-    "image_head.pth",
-    "text_encoder.pth",
-    "text_head.pth",
-    "cross_attention_fusion.pth",
-    "fusion_model.pth",
+    "fusion_model_best.pth",
     "modality_classifier.pth",
-    "image_head_fused.pth",
-    "text_head_fused.pth",
     "multimodal_config.json",
-    "text_config.json",
-    "image_config.json",
-    "tokenizer/vocab.txt",
+    "tokenizer/tokenizer.json",
     "tokenizer/tokenizer_config.json",
-    "tokenizer/special_tokens_map.json",
 ]
 
 
