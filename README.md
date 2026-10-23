@@ -137,6 +137,12 @@ Modality classifier test accuracy: 0.9999.
 - **The model is calibrated out of the box.** The fitted temperatures are 0.99-1.02, and the
   expected calibration error is 0.011 before and after scaling, so the confidences the API returns
   can be read as probabilities.
+- **On average the details add nothing; on single cases they can dominate.** Example: a clinical photo of a
+  melanoma scores Melanoma 43.6% (above threshold) image-only, but with only "21-year-old male." as the details the
+  fused model says Melanocytic Nevi 90.9% and Melanoma 3.1%. Adding a lesion site ("Lesion on the back.") brings
+  Melanoma back to 68.5%. The fused model has learned HAM10000's age and site patterns (melanoma is rare in young
+  patients) strongly enough to overrule the image. The app warns whenever the details change the top finding; the
+  fix belongs in training (more text dropout, or capping how far the details can move the image's scores).
 - **Chest is the hard part.** 0.755 macro AUROC on the official patient-disjoint split, from 30% of
   the training patients. The best findings are Hernia (0.85), Pneumothorax (0.82) and Edema (0.81);
   the worst are Nodule (0.68) and Infiltration (0.70). Training on all patients is the main lever

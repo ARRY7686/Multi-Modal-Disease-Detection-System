@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { findHotspot } from '../lib/hotspot'
 import { MODALITIES, SOURCE_LABELS, pct, prettyLabel } from '../lib/domain'
-import { Close, Expand, Upload } from './Icons'
+import { Alert, Close, Expand, Upload } from './Icons'
 
 const MAX_MB = 10
 
@@ -29,7 +29,7 @@ function Callout({ slot, cardRef, eyebrow, title, sub, accent, children }) {
   )
 }
 
-function FindingCallout({ p, slot, cardRef, eyebrow }) {
+function FindingCallout({ p, slot, cardRef, eyebrow, override }) {
   return (
     <Callout
       slot={slot}
@@ -46,6 +46,14 @@ function FindingCallout({ p, slot, cardRef, eyebrow }) {
         </div>
         <span className="num text-sm text-ink">{pct(p.confidence)}</span>
       </div>
+      {override && (
+        <div className="mt-3 flex gap-1.5 border-t border-line pt-2.5 text-[11px] leading-snug text-status-warning">
+          <Alert className="mt-px h-3 w-3 shrink-0" />
+          <span>
+            Image only says {prettyLabel(override.image.disease)} ({pct(override.image.confidence)})
+          </span>
+        </div>
+      )}
     </Callout>
   )
 }
@@ -87,7 +95,7 @@ function useLeaders(stageRef, targetRef, cards, deps) {
   return [lines, measure]
 }
 
-export default function Stage({ preview, fileName, onImage, result, loading }) {
+export default function Stage({ preview, fileName, onImage, result, override, loading }) {
   const stageRef = useRef(null)
   const targetRef = useRef(null)
   const inputRef = useRef(null)
@@ -288,7 +296,13 @@ export default function Stage({ preview, fileName, onImage, result, loading }) {
                 }`}
               />
               {preds[0] && (
-                <FindingCallout p={preds[0]} slot="tr" cardRef={refs.tr} eyebrow={heatmap ? 'Top finding · Grad-CAM focus' : 'Top finding'} />
+                <FindingCallout
+                  p={preds[0]}
+                  slot="tr"
+                  cardRef={refs.tr}
+                  override={override}
+                  eyebrow={heatmap ? 'Top finding · Grad-CAM focus' : 'Top finding'}
+                />
               )}
               {preds[1] && <FindingCallout p={preds[1]} slot="bl" cardRef={refs.bl} eyebrow="Second" />}
               {preds[2] && <FindingCallout p={preds[2]} slot="br" cardRef={refs.br} eyebrow="Third" />}

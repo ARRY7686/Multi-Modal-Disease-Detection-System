@@ -11,7 +11,7 @@ import ResultsPanel from './components/ResultsPanel'
 import Section from './components/Section'
 import Stage from './components/Stage'
 import useHistory, { thumbnail } from './hooks/useHistory'
-import { buildDetailsText } from './lib/domain'
+import { buildDetailsText, detailsOverride } from './lib/domain'
 
 const TABS = [
   ['analyze', 'Analyze'],
@@ -237,7 +237,10 @@ export default function App() {
                 id="scan"
                 className="scroll-mt-28 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start"
               >
-                <Stage preview={preview} fileName={file?.name} onImage={onImage} result={stageResult} loading={loading} />
+                <Stage preview={preview} fileName={file?.name} onImage={onImage} result={stageResult}
+                  override={active ? detailsOverride(active.results) : null}
+                  loading={loading}
+                />
               </div>
 
               {/* Inputs */}

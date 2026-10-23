@@ -48,5 +48,16 @@ export function buildDetailsText({ modality, age, sex, view, site }) {
   return parts.filter(Boolean).join(' ') || ''
 }
 
+/**
+ * When an analysis ran both ways and the patient details changed the top
+ * finding: {image, fused} predictions, else null.
+ */
+export function detailsOverride(results) {
+  const image = results?.image_only?.predictions?.[0]
+  const fused = results?.multimodal?.predictions?.[0]
+  if (!image || !fused || image.label_index === fused.label_index) return null
+  return { image, fused }
+}
+
 export const pct = (x, digits = 1) => (x == null || Number.isNaN(x) ? '–' : `${(x * 100).toFixed(digits)}%`)
 export const fixed = (x, digits = 3) => (x == null || Number.isNaN(x) ? '–' : Number(x).toFixed(digits))

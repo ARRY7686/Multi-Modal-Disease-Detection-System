@@ -40,3 +40,4 @@ frontend/dist/
 
 # Kaggle
 kaggle_notebooks/.ipynb_checkpoints/
+models/tokenizer/

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MODALITIES, MODES, SOURCE_LABELS, pct } from '../lib/domain'
+import { MODALITIES, MODES, SOURCE_LABELS, detailsOverride, pct, prettyLabel } from '../lib/domain'
 import CompareView, { compareModes } from './CompareView'
 import { Alert, Download, Printer } from './Icons'
 import PredictionList from './PredictionList'
@@ -31,6 +31,7 @@ export default function ResultsPanel({ entry }) {
   const [asTable, setAsTable] = useState(false)
   const main = entry.results[entry.primary]
   const flagged = main.predictions.filter((p) => p.positive)
+  const override = detailsOverride(entry.results)
   const hasCompare = compareModes(entry.results).length > 1
   const hasText = main.explanation?.highlighted_text || main.explanation?.important_tokens?.length
   let n = 0
@@ -53,6 +54,26 @@ export default function ResultsPanel({ entry }) {
           </>
         }
       >
+        {override && (
+          <div className="mb-8 flex gap-4 rounded-2xl border border-status-warning/40 bg-status-warning/[0.07] p-5">
+            <Alert className="mt-0.5 h-5 w-5 shrink-0 text-status-warning" />
+            <div className="text-sm leading-relaxed text-ink-2">
+              <p className="text-[15px] text-ink">The patient details changed the top finding.</p>
+              <p className="mt-1.5">
+                Image only: <span className="text-ink">{prettyLabel(override.image.disease)}</span>{' '}
+                <span className="num">{pct(override.image.confidence)}</span>
+                {override.image.positive && ' (above threshold)'}. With details:{' '}
+                <span className="text-ink">{prettyLabel(override.fused.disease)}</span>{' '}
+                <span className="num">{pct(override.fused.confidence)}</span>.
+              </p>
+              <p className="mt-1.5 text-ink-muted">
+                On held-out data the image alone scores as well as the fused model, and the fused model leans on
+                age and site patterns from its training set (for example, young age pushes towards benign nevi). Do not
+                let the details overrule the image.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid grid-cols-2 content-start gap-x-6 gap-y-5">
             <Stat label="Modality">
