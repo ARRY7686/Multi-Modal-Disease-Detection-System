@@ -95,7 +95,7 @@ function useLeaders(stageRef, targetRef, cards, deps) {
   return [lines, measure]
 }
 
-export default function Stage({ preview, fileName, onImage, result, override, loading }) {
+export default function Stage({ preview, fileName, onImage, canUpload = true, onBrowse, result, override, loading }) {
   const stageRef = useRef(null)
   const targetRef = useRef(null)
   const inputRef = useRef(null)
@@ -113,13 +113,13 @@ export default function Stage({ preview, fileName, onImage, result, override, lo
 
   const accept = useCallback(
     (file) => {
-      if (!file) return
+      if (!file || !canUpload) return
       if (!file.type.startsWith('image/')) return setError('That file is not an image.')
       if (file.size > MAX_MB * 1024 * 1024) return setError(`Images up to ${MAX_MB} MB.`)
       setError(null)
       onImage(file)
     },
-    [onImage],
+    [onImage, canUpload],
   )
 
   useEffect(() => {
@@ -243,7 +243,7 @@ export default function Stage({ preview, fileName, onImage, result, override, lo
             <button
               ref={targetRef}
               type="button"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => (canUpload ? inputRef.current?.click() : onBrowse?.())}
               className={`group relative flex h-72 w-72 flex-col items-center justify-center rounded-full border text-center transition-all ${
                 dragging ? 'scale-105 border-violet' : 'border-line-strong hover:scale-[1.02]'
               }`}
@@ -256,8 +256,10 @@ export default function Stage({ preview, fileName, onImage, result, override, lo
               <span className="mb-3 rounded-full border border-white/20 bg-white/10 p-3 text-ink">
                 <Upload className="h-5 w-5" />
               </span>
-              <span className="text-[15px] text-ink">Drop a scan</span>
-              <span className="mt-1 px-10 text-xs text-ink-2">or click to browse, or paste</span>
+              <span className="text-[15px] text-ink">{canUpload ? 'Drop a scan' : 'Pick an example'}</span>
+              <span className="mt-1 px-10 text-xs text-ink-2">
+                {canUpload ? 'or click to browse, or paste' : 'held-out test cases, outputs precomputed'}
+              </span>
             </button>
           ) : (
             <div ref={targetRef} className="w-[min(100%,360px)] md:w-[34%] md:min-w-[260px] md:max-w-[380px]">
@@ -315,9 +317,11 @@ export default function Stage({ preview, fileName, onImage, result, override, lo
       <div className="no-print mt-4 flex flex-wrap items-center justify-center gap-3">
         {preview && (
           <>
-            <button type="button" onClick={() => inputRef.current?.click()} className="pill pill-sm">
-              Replace
-            </button>
+            {canUpload && (
+              <button type="button" onClick={() => inputRef.current?.click()} className="pill pill-sm">
+                Replace
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {

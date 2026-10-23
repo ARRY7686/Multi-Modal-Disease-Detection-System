@@ -14,6 +14,8 @@ Combines **medical image analysis** (chest X-rays, dermoscopy, brain MRI) with *
 [![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 
+**[Live demo](https://huggingface.co/spaces/Arry7868/Multi-Modal-Disease-Detection)** · **[Weights](https://huggingface.co/Arry7868/multimodal-disease-detection)**
+
 </div>
 
 ---
@@ -304,7 +306,9 @@ multimodalAI/
 │
 ├── scripts/
 │   ├── download_models.py            # Download weights (Hugging Face Hub, Kaggle or a local folder)
-│   ├── publish_hf.py                 # Publish weights + the Docker Space to the Hub
+│   ├── publish_hf.py                 # Publish weights + the static (or Docker) Space to the Hub
+│   ├── build_gallery.py              # Precompute example-case outputs for the demo gallery
+│   ├── gallery_cases.json            # The 12 example cases (one per class, random test-split draw)
 │   └── setup.sh                      # One-command project setup
 │
 ├── tests/                            # pytest suite on tiny offline models (no downloads)
@@ -388,7 +392,7 @@ npm run dev
 
 Open **http://localhost:5173** in your browser.
 
-### Docker / Hugging Face Space
+### Docker
 
 The `Dockerfile` builds the React app and serves it from FastAPI on one port, pulling the trained weights
 from a Hugging Face model repo at build time:
@@ -396,11 +400,27 @@ from a Hugging Face model repo at build time:
 ```bash
 docker build -t mmdd .                                  # MODEL_REPO build arg picks the weights repo
 docker run -p 7860:7860 mmdd                             # http://localhost:7860
+```
 
+### Hugging Face demo (static gallery)
+
+Hugging Face only hosts Docker Spaces for PRO accounts, so the public demo is a free **static Space**: the
+same frontend built with `VITE_STATIC=1`, answering from precomputed outputs for 12 example cases instead of
+an API. The cases are one per class, drawn at random (seed 0) from each dataset's held-out test split and not
+filtered by what the model predicts, so the gallery shows its misses too (the dataset label is shown next to
+the findings). In the full app the same cases are one-click examples that run live.
+
+```bash
 hf auth login                                            # write token, once
 python scripts/publish_hf.py weights --repo USER/multimodal-disease-detection
+
+# Originals named by case id (skin-mel.jpg, chest-effusion.png, ...); see scripts/gallery_cases.json for sources
+python -m scripts.build_gallery --images path/to/originals   # rerun whenever models/ changes
+cd frontend && npm run build:static && cd ..             # -> frontend/dist-static
 python scripts/publish_hf.py space --repo USER/Multi-Modal-Disease-Detection --model-repo USER/multimodal-disease-detection
 ```
+
+With a PRO account, `publish_hf.py docker-space` deploys the full Docker app instead.
 
 ### Running Tests
 
@@ -541,15 +561,17 @@ A dark React app (Vite + Tailwind) in a violet glass style with three tabs: **An
 | Feature | Description |
 |---------|-------------|
 | **Image input** | Drop, browse or paste onto the centre stage; replace / remove |
+| **Example cases** | 12 held-out test cases (one per class) load with their recorded details in one click; the dataset label appears next to the findings |
 | **Structured patient details** | Age, sex and X-ray view or lesion site, turned into the exact sentence shape of the training metadata; the text sent to the model is shown. Free text is available, with a warning that it is outside what the text model learned |
 | **Modality selector** | Auto (modality classifier) or Chest / Skin / Brain |
 | **Compare all three modes** | Scores the same case image only, details only and fused, side by side (chart or table), with the modality fixed so all three rank the same classes |
-| **Predictions** | Top-5 classes with confidence bars, each class's validation-fitted threshold as a tick, and an "Above threshold" flag |
+| **Predictions** | Top-5 classes, flagged (above-threshold) findings first, with confidence bars, each class's validation-fitted threshold as a tick, and an "Above threshold" flag |
 | **Grad-CAM stage** | Overlay with a heat slider, original view, hotspot marker, callouts on leader lines, full screen |
 | **Text attention** | Highlighted text plus a ranked word-importance list |
 | **Model card** | Live from `GET /model-info`: held-out test table with 95% CIs, per-finding chest AUROC (multimodal vs image only), validation AUROC per epoch, data counts and evaluation protocol |
 | **History, export** | Last 12 analyses kept in the browser; download a result as JSON or print a report |
 | **Status and shortcuts** | Health indicator (models loaded / no trained weights / offline), Ctrl + Enter to analyze |
+| **Static build** | `npm run build:static` runs with no backend: examples only, answered from the precomputed gallery |
 
 ---
 

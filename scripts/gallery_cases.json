@@ -1,0 +1,174 @@
+[
+  {
+    "id": "skin-mel",
+    "modality": "skin",
+    "label": [
+      "Melanoma"
+    ],
+    "source": {
+      "dataset": "kmader/skin-cancer-mnist-ham10000",
+      "file": "ISIC_0033568.jpg"
+    },
+    "details": {
+      "age": 45,
+      "sex": "male",
+      "site": "back"
+    }
+  },
+  {
+    "id": "skin-nv",
+    "modality": "skin",
+    "label": [
+      "Melanocytic_Nevi"
+    ],
+    "source": {
+      "dataset": "kmader/skin-cancer-mnist-ham10000",
+      "file": "ISIC_0030066.jpg"
+    },
+    "details": {
+      "age": 35,
+      "sex": "male",
+      "site": "chest"
+    }
+  },
+  {
+    "id": "skin-bcc",
+    "modality": "skin",
+    "label": [
+      "Basal_Cell_Carcinoma"
+    ],
+    "source": {
+      "dataset": "kmader/skin-cancer-mnist-ham10000",
+      "file": "ISIC_0031294.jpg"
+    },
+    "details": {
+      "age": 80,
+      "sex": "male",
+      "site": "face"
+    }
+  },
+  {
+    "id": "skin-bkl",
+    "modality": "skin",
+    "label": [
+      "Benign_Keratosis"
+    ],
+    "source": {
+      "dataset": "kmader/skin-cancer-mnist-ham10000",
+      "file": "ISIC_0025286.jpg"
+    },
+    "details": {
+      "age": 50,
+      "sex": "male",
+      "site": "lower extremity"
+    }
+  },
+  {
+    "id": "chest-cardiomegaly",
+    "modality": "chest",
+    "label": [
+      "Cardiomegaly"
+    ],
+    "source": {
+      "dataset": "nih-chest-xrays/data",
+      "file": "00007551_021.png"
+    },
+    "details": {
+      "age": 27,
+      "sex": "male",
+      "view": "PA"
+    }
+  },
+  {
+    "id": "chest-effusion",
+    "modality": "chest",
+    "label": [
+      "Effusion"
+    ],
+    "source": {
+      "dataset": "nih-chest-xrays/data",
+      "file": "00018360_001.png"
+    },
+    "details": {
+      "age": 61,
+      "sex": "male",
+      "view": "PA"
+    }
+  },
+  {
+    "id": "chest-pneumothorax",
+    "modality": "chest",
+    "label": [
+      "Pneumothorax"
+    ],
+    "source": {
+      "dataset": "nih-chest-xrays/data",
+      "file": "00026451_030.png"
+    },
+    "details": {
+      "age": 51,
+      "sex": "male",
+      "view": "PA"
+    }
+  },
+  {
+    "id": "chest-no-finding",
+    "modality": "chest",
+    "label": [],
+    "source": {
+      "dataset": "nih-chest-xrays/data",
+      "file": "00028635_001.png"
+    },
+    "details": {
+      "age": 41,
+      "sex": "female",
+      "view": "PA"
+    }
+  },
+  {
+    "id": "brain-glioma",
+    "modality": "brain",
+    "label": [
+      "Glioma"
+    ],
+    "source": {
+      "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+      "file": "Training/glioma_tumor/gg (519).jpg"
+    },
+    "details": {}
+  },
+  {
+    "id": "brain-meningioma",
+    "modality": "brain",
+    "label": [
+      "Meningioma"
+    ],
+    "source": {
+      "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+      "file": "Testing/meningioma_tumor/image(36).jpg"
+    },
+    "details": {}
+  },
+  {
+    "id": "brain-pituitary-tumor",
+    "modality": "brain",
+    "label": [
+      "Pituitary_Tumor"
+    ],
+    "source": {
+      "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+      "file": "Training/pituitary_tumor/p (652).jpg"
+    },
+    "details": {}
+  },
+  {
+    "id": "brain-no-tumor",
+    "modality": "brain",
+    "label": [],
+    "source": {
+      "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+      "file": "Training/no_tumor/image(188).jpg"
+    },
+    "details": {}
+  }
+]

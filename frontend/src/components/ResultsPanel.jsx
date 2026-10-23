@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MODALITIES, MODES, SOURCE_LABELS, detailsOverride, pct, prettyLabel } from '../lib/domain'
+import { exampleLabel } from '../lib/gallery'
 import CompareView, { compareModes } from './CompareView'
 import { Alert, Download, Printer } from './Icons'
 import PredictionList from './PredictionList'
@@ -34,6 +35,7 @@ export default function ResultsPanel({ entry }) {
   const override = detailsOverride(entry.results)
   const hasCompare = compareModes(entry.results).length > 1
   const hasText = main.explanation?.highlighted_text || main.explanation?.important_tokens?.length
+  const truth = entry.input.example
   let n = 0
 
   return (
@@ -97,6 +99,12 @@ export default function ResultsPanel({ entry }) {
               <span className="num">{Math.round(main.inference_time_ms)}</span>
               <span className="text-ink-muted"> ms</span>
             </Stat>
+            {truth && (
+              <Stat label="Dataset label">
+                {exampleLabel(truth)}
+                <div className="text-xs text-ink-muted">Held-out test case</div>
+              </Stat>
+            )}
             {main.warnings?.length > 0 && (
               <div className="col-span-2 flex gap-3 rounded-2xl border border-status-warning/30 bg-status-warning/5 p-4 text-sm text-ink-2">
                 <Alert className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />

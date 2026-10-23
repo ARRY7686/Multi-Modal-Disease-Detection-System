@@ -1,12 +1,18 @@
 r"""
 Publish trained weights and the demo Space to the Hugging Face Hub.
 
-    python scripts/publish_hf.py weights --repo USER/multimodal-disease-detection --models-dir models
-    python scripts/publish_hf.py space   --repo USER/Multi-Modal-Disease-Detection --model-repo USER/multimodal-disease-detection
+    python scripts/publish_hf.py weights      --repo USER/multimodal-disease-detection --models-dir models
+    python scripts/publish_hf.py space        --repo USER/Multi-Modal-Disease-Detection --model-repo USER/multimodal-disease-detection
+    python scripts/publish_hf.py docker-space --repo USER/Multi-Modal-Disease-Detection --model-repo USER/multimodal-disease-detection
 
 Needs a write token: `hf auth login` (or HF_TOKEN in the environment).
-The Space is a Docker Space built from the repository's Dockerfile; it pulls
-the weights from the model repo at build time.
+
+`space` publishes the static demo: the frontend built with
+`npm run build:static` (frontend/dist-static), answering from the gallery that
+scripts/build_gallery.py precomputed. Static Spaces are free.
+`docker-space` publishes the full app built from the repository's Dockerfile,
+which pulls the weights from the model repo at build time. Hugging Face only
+hosts Docker Spaces for PRO accounts.
 """
 
 from __future__ import annotations
@@ -66,7 +72,33 @@ Licensed CC BY-NC 4.0 because HAM10000 is; check each dataset's own terms before
 """
 
 
-def space_readme(model_repo: str, github: str) -> str:
+def static_space_readme(model_repo: str, github: str) -> str:
+    return f"""---
+title: Multi-Modal Disease Detection
+emoji: 🩻
+colorFrom: blue
+colorTo: gray
+sdk: static
+app_file: index.html
+pinned: false
+license: cc-by-nc-sa-4.0
+short_description: Chest X-ray, skin and brain MRI findings with Grad-CAM
+models: [{model_repo}]
+---
+
+Static demo: 12 held-out test cases (one per class, drawn at random) with the real model's
+outputs precomputed, including Grad-CAM, text attention and the three-mode comparison.
+To analyze your own scan, run the app from the source: {github}
+Weights: [{model_repo}](https://huggingface.co/{model_repo}).
+
+Example images: NIH ChestX-ray14 (NIH Clinical Center), HAM10000 (ISIC Archive, CC BY-NC-SA 4.0),
+Brain Tumor Classification MRI (Sartaj Bhuvaji et al., MIT).
+
+Not a medical device. Do not use for diagnosis.
+"""
+
+
+def docker_space_readme(model_repo: str, github: str) -> str:
     return f"""---
 title: Multi-Modal Disease Detection
 emoji: 🩻
@@ -103,14 +135,34 @@ def publish_weights(api: HfApi, repo: str, models_dir: Path, github: str) -> Non
     print(f"Weights published: https://huggingface.co/{repo}")
 
 
-def publish_space(api: HfApi, repo: str, model_repo: str, github: str) -> None:
+def publish_static_space(api: HfApi, repo: str, model_repo: str, github: str, dist: Path) -> None:
+    gallery = dist / "gallery"
+    if not (dist / "index.html").is_file() or not (gallery / "index.json").is_file():
+        raise SystemExit(f"No static build with a gallery in {dist}: run scripts/build_gallery.py, then npm run build:static")
+    cases = json.loads((gallery / "index.json").read_text(encoding="utf-8"))["cases"]
+    missing = [c["id"] for c in cases if not (gallery / f"{c['id']}.json").is_file()]
+    if missing:
+        raise SystemExit(f"Gallery outputs missing for {missing}: rerun scripts/build_gallery.py and rebuild")
+    api.create_repo(repo, repo_type="space", space_sdk="static", exist_ok=True)
+    api.upload_folder(
+        repo_id=repo, folder_path=str(dist), repo_type="space",
+        commit_message="Deploy static demo", delete_patterns=["assets/*", "gallery/*"],
+    )
+    api.upload_file(
+        repo_id=repo, path_or_fileobj=static_space_readme(model_repo, github).encode("utf-8"),
+        path_in_repo="README.md", repo_type="space", commit_message="Space card",
+    )
+    print(f"Space deployed: https://huggingface.co/spaces/{repo}")
+
+
+def publish_docker_space(api: HfApi, repo: str, model_repo: str, github: str) -> None:
     api.create_repo(repo, repo_type="space", space_sdk="docker", exist_ok=True)
     api.upload_folder(
         repo_id=repo, folder_path=str(PROJECT_ROOT), repo_type="space",
         ignore_patterns=SPACE_IGNORE, commit_message="Deploy from repository",
     )
     api.upload_file(
-        repo_id=repo, path_or_fileobj=space_readme(model_repo, github).encode("utf-8"),
+        repo_id=repo, path_or_fileobj=docker_space_readme(model_repo, github).encode("utf-8"),
         path_in_repo="README.md", repo_type="space", commit_message="Space card",
     )
     print(f"Space deployed: https://huggingface.co/spaces/{repo}")
@@ -118,10 +170,12 @@ def publish_space(api: HfApi, repo: str, model_repo: str, github: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("target", choices=["weights", "space"])
+    parser.add_argument("target", choices=["weights", "space", "docker-space"])
     parser.add_argument("--repo", required=True, help="Hub repo id to create or update")
     parser.add_argument("--models-dir", type=Path, default=PROJECT_ROOT / "models")
-    parser.add_argument("--model-repo", help="Weights repo the Space builds from (space only)")
+    parser.add_argument("--model-repo", help="Weights repo the Space links to / builds from (spaces only)")
+    parser.add_argument("--dist", type=Path, default=PROJECT_ROOT / "frontend" / "dist-static",
+                        help="Static build to publish (space only)")
     parser.add_argument(
         "--github", default="https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System",
     )
@@ -131,8 +185,11 @@ def main():
         publish_weights(api, args.repo, args.models_dir, args.github)
     else:
         if not args.model_repo:
-            parser.error("space needs --model-repo")
-        publish_space(api, args.repo, args.model_repo, args.github)
+            parser.error(f"{args.target} needs --model-repo")
+        if args.target == "space":
+            publish_static_space(api, args.repo, args.model_repo, args.github, args.dist)
+        else:
+            publish_docker_space(api, args.repo, args.model_repo, args.github)
 
 
 if __name__ == "__main__":

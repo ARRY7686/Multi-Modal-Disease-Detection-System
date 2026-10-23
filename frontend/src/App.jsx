@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { checkHealth, errorMessage, predict } from './api'
 import About from './components/About'
+import Examples from './components/Examples'
 import Header from './components/Header'
 import HistoryPanel from './components/HistoryPanel'
 import { Alert } from './components/Icons'
@@ -12,6 +13,7 @@ import Section from './components/Section'
 import Stage from './components/Stage'
 import useHistory, { thumbnail } from './hooks/useHistory'
 import { buildDetailsText, detailsOverride } from './lib/domain'
+import { STATIC, exampleFile, exampleTitle, loadGallery } from './lib/gallery'
 
 const TABS = [
   ['analyze', 'Analyze'],
@@ -23,6 +25,7 @@ const tabFromHash = () => {
   return TABS.some(([k]) => k === h) ? h : 'analyze'
 }
 const EMPTY_DETAILS = { kind: 'structured', age: '', sex: '', view: '', site: '', text: '' }
+const REPO = 'https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System'
 
 const FEATURES = [
   ['#a99ff0', 'Fusion', 'EfficientNet-B4 × BioBERT'],
@@ -97,6 +100,8 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [active, setActive] = useState(null)
+  const [gallery, setGallery] = useState([])
+  const [example, setExample] = useState(null) // gallery case the inputs came from
   const previews = useRef({}) // entry id -> full-size image, this session only
   const history = useHistory()
 
@@ -110,6 +115,10 @@ export default function App() {
     const onHash = () => setTabState(tabFromHash())
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  useEffect(() => {
+    loadGallery().then(setGallery)
   }, [])
 
   useEffect(() => {
@@ -129,9 +138,24 @@ export default function App() {
   const onImage = useCallback(async (f) => {
     setFile(f)
     setPreview(f ? await readDataUrl(f) : null)
+    setExample(null)
     setActive(null)
     setError(null)
   }, [])
+
+  // Load an example's image and recorded details, with the modality fixed so
+  // the details sentence matches the one its cached results were computed on.
+  const pickExample = async (c) => {
+    try {
+      await onImage(await exampleFile(c))
+    } catch {
+      return setError('Could not load that example.')
+    }
+    setExample(c)
+    setModality(c.modality)
+    const { age, sex = '', view = '', site = '' } = c.details
+    setDetails({ ...EMPTY_DETAILS, age: age == null ? '' : String(age), sex, view, site })
+  }
 
   const text = details.kind === 'structured' ? buildDetailsText({ modality, ...details }) : details.text.trim()
   const canRun = (file || text) && !loading && health !== false
@@ -142,14 +166,14 @@ export default function App() {
     setLoading(true)
     setError(null)
     try {
-      const first = await predict({ image: file, symptoms: text, modality })
+      const first = await predict({ image: file, symptoms: text, modality, example })
       const results = { [first.mode]: first }
       if (willCompare) {
         // Same case each way, with the modality fixed to the multimodal call's,
         // so all three rank the same classes.
         const [img, txt] = await Promise.allSettled([
-          predict({ image: file, modality: first.modality }),
-          predict({ symptoms: text, modality: first.modality }),
+          predict({ image: file, modality: first.modality, example }),
+          predict({ symptoms: text, modality: first.modality, example }),
         ])
         if (img.status === 'fulfilled') results.image_only = img.value
         if (txt.status === 'fulfilled') results.text_only = txt.value
@@ -159,7 +183,12 @@ export default function App() {
         ts: Date.now(),
         primary: first.mode,
         results,
-        input: { modality, text, fileName: file?.name || null },
+        input: {
+          modality,
+          text,
+          fileName: file?.name || null,
+          example: example && { id: example.id, modality: example.modality, label: example.label },
+        },
         thumb: await thumbnail(preview),
       }
       previews.current[entry.id] = preview
@@ -170,7 +199,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [file, text, modality, willCompare, preview, history])
+  }, [file, text, modality, example, willCompare, preview, history])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -237,7 +266,13 @@ export default function App() {
                 id="scan"
                 className="scroll-mt-28 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start"
               >
-                <Stage preview={preview} fileName={file?.name} onImage={onImage} result={stageResult}
+                <Stage
+                  preview={preview}
+                  fileName={example ? exampleTitle(example) : file?.name}
+                  onImage={onImage}
+                  canUpload={!STATIC}
+                  onBrowse={() => document.getElementById('inputs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  result={stageResult}
                   override={active ? detailsOverride(active.results) : null}
                   loading={loading}
                 />
@@ -245,6 +280,17 @@ export default function App() {
 
               {/* Inputs */}
               <div id="inputs" className="glass no-print scroll-mt-28 space-y-7 p-6 sm:p-7">
+                {STATIC && (
+                  <p className="rounded-2xl border border-violet/30 bg-violet/[0.06] p-4 text-sm leading-relaxed text-ink-2">
+                    <span className="text-ink">Static demo.</span> Each example below was run once through the real
+                    model and its outputs saved, so this page needs no server. To analyze your own scan,{' '}
+                    <a href={REPO} className="text-violet underline-offset-4 hover:underline">
+                      run the app locally or with Docker
+                    </a>
+                    .
+                  </p>
+                )}
+                <Examples cases={gallery} activeId={example?.id} onPick={pickExample} busy={loading} />
                 <ModalityPicker value={modality} onChange={setModality} />
                 <PatientDetails modality={modality} details={details} onChange={setDetails} />
                 <label className="flex cursor-pointer items-start gap-3">

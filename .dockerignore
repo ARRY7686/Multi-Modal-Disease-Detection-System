@@ -7,6 +7,7 @@ venv
 .ruff_cache
 frontend/node_modules
 frontend/dist
+frontend/dist-static
 kaggle_notebooks
 models/*.pth
 models/tokenizer

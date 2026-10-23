@@ -1,0 +1,212 @@
+{
+ "cases": [
+  {
+   "id": "skin-mel",
+   "modality": "skin",
+   "label": [
+    "Melanoma"
+   ],
+   "source": {
+    "dataset": "kmader/skin-cancer-mnist-ham10000",
+    "file": "ISIC_0033568.jpg"
+   },
+   "details": {
+    "age": 45,
+    "sex": "male",
+    "site": "back"
+   },
+   "text": "45-year-old male. Lesion on the back.",
+   "image": "skin-mel.jpg",
+   "thumb": "skin-mel-thumb.jpg"
+  },
+  {
+   "id": "skin-nv",
+   "modality": "skin",
+   "label": [
+    "Melanocytic_Nevi"
+   ],
+   "source": {
+    "dataset": "kmader/skin-cancer-mnist-ham10000",
+    "file": "ISIC_0030066.jpg"
+   },
+   "details": {
+    "age": 35,
+    "sex": "male",
+    "site": "chest"
+   },
+   "text": "35-year-old male. Lesion on the chest.",
+   "image": "skin-nv.jpg",
+   "thumb": "skin-nv-thumb.jpg"
+  },
+  {
+   "id": "skin-bcc",
+   "modality": "skin",
+   "label": [
+    "Basal_Cell_Carcinoma"
+   ],
+   "source": {
+    "dataset": "kmader/skin-cancer-mnist-ham10000",
+    "file": "ISIC_0031294.jpg"
+   },
+   "details": {
+    "age": 80,
+    "sex": "male",
+    "site": "face"
+   },
+   "text": "80-year-old male. Lesion on the face.",
+   "image": "skin-bcc.jpg",
+   "thumb": "skin-bcc-thumb.jpg"
+  },
+  {
+   "id": "skin-bkl",
+   "modality": "skin",
+   "label": [
+    "Benign_Keratosis"
+   ],
+   "source": {
+    "dataset": "kmader/skin-cancer-mnist-ham10000",
+    "file": "ISIC_0025286.jpg"
+   },
+   "details": {
+    "age": 50,
+    "sex": "male",
+    "site": "lower extremity"
+   },
+   "text": "50-year-old male. Lesion on the lower extremity.",
+   "image": "skin-bkl.jpg",
+   "thumb": "skin-bkl-thumb.jpg"
+  },
+  {
+   "id": "chest-cardiomegaly",
+   "modality": "chest",
+   "label": [
+    "Cardiomegaly"
+   ],
+   "source": {
+    "dataset": "nih-chest-xrays/data",
+    "file": "00007551_021.png"
+   },
+   "details": {
+    "age": 27,
+    "sex": "male",
+    "view": "PA"
+   },
+   "text": "27-year-old male. PA chest radiograph.",
+   "image": "chest-cardiomegaly.jpg",
+   "thumb": "chest-cardiomegaly-thumb.jpg"
+  },
+  {
+   "id": "chest-effusion",
+   "modality": "chest",
+   "label": [
+    "Effusion"
+   ],
+   "source": {
+    "dataset": "nih-chest-xrays/data",
+    "file": "00018360_001.png"
+   },
+   "details": {
+    "age": 61,
+    "sex": "male",
+    "view": "PA"
+   },
+   "text": "61-year-old male. PA chest radiograph.",
+   "image": "chest-effusion.jpg",
+   "thumb": "chest-effusion-thumb.jpg"
+  },
+  {
+   "id": "chest-pneumothorax",
+   "modality": "chest",
+   "label": [
+    "Pneumothorax"
+   ],
+   "source": {
+    "dataset": "nih-chest-xrays/data",
+    "file": "00026451_030.png"
+   },
+   "details": {
+    "age": 51,
+    "sex": "male",
+    "view": "PA"
+   },
+   "text": "51-year-old male. PA chest radiograph.",
+   "image": "chest-pneumothorax.jpg",
+   "thumb": "chest-pneumothorax-thumb.jpg"
+  },
+  {
+   "id": "chest-no-finding",
+   "modality": "chest",
+   "label": [],
+   "source": {
+    "dataset": "nih-chest-xrays/data",
+    "file": "00028635_001.png"
+   },
+   "details": {
+    "age": 41,
+    "sex": "female",
+    "view": "PA"
+   },
+   "text": "41-year-old female. PA chest radiograph.",
+   "image": "chest-no-finding.jpg",
+   "thumb": "chest-no-finding-thumb.jpg"
+  },
+  {
+   "id": "brain-glioma",
+   "modality": "brain",
+   "label": [
+    "Glioma"
+   ],
+   "source": {
+    "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+    "file": "Training/glioma_tumor/gg (519).jpg"
+   },
+   "details": {},
+   "text": "No clinical details provided.",
+   "image": "brain-glioma.jpg",
+   "thumb": "brain-glioma-thumb.jpg"
+  },
+  {
+   "id": "brain-meningioma",
+   "modality": "brain",
+   "label": [
+    "Meningioma"
+   ],
+   "source": {
+    "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+    "file": "Testing/meningioma_tumor/image(36).jpg"
+   },
+   "details": {},
+   "text": "No clinical details provided.",
+   "image": "brain-meningioma.jpg",
+   "thumb": "brain-meningioma-thumb.jpg"
+  },
+  {
+   "id": "brain-pituitary-tumor",
+   "modality": "brain",
+   "label": [
+    "Pituitary_Tumor"
+   ],
+   "source": {
+    "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+    "file": "Training/pituitary_tumor/p (652).jpg"
+   },
+   "details": {},
+   "text": "No clinical details provided.",
+   "image": "brain-pituitary-tumor.jpg",
+   "thumb": "brain-pituitary-tumor-thumb.jpg"
+  },
+  {
+   "id": "brain-no-tumor",
+   "modality": "brain",
+   "label": [],
+   "source": {
+    "dataset": "sartajbhuvaji/brain-tumor-classification-mri",
+    "file": "Training/no_tumor/image(188).jpg"
+   },
+   "details": {},
+   "text": "No clinical details provided.",
+   "image": "brain-no-tumor.jpg",
+   "thumb": "brain-no-tumor-thumb.jpg"
+  }
+ ]
+}

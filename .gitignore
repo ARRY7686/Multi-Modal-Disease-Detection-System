@@ -34,6 +34,11 @@ models/*.bin
 # Node
 frontend/node_modules/
 frontend/dist/
+frontend/dist-static/
+
+# Gallery outputs (scripts/build_gallery.py); regenerate after changing weights
+frontend/public/gallery/*.json
+!frontend/public/gallery/index.json
 
 # Jupyter
 .ipynb_checkpoints/

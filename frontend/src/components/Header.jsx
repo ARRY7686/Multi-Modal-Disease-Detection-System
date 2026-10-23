@@ -1,3 +1,4 @@
+import { STATIC } from '../lib/gallery'
 import { Github } from './Icons'
 
 const REPO = 'https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System'
@@ -12,8 +13,9 @@ function Logo() {
 }
 
 function Status({ health }) {
-  const state = health === null ? 'checking' : health === false ? 'offline' : health.status
+  const state = STATIC ? 'static' : health === null ? 'checking' : health === false ? 'offline' : health.status
   const [dot, label] = {
+    static: ['bg-violet', 'Static demo'],
     checking: ['bg-ink-muted animate-pulse', 'Connecting'],
     offline: ['bg-status-critical', 'API offline'],
     degraded: ['bg-status-warning', 'No trained weights'],
