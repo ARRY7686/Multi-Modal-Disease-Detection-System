@@ -8,7 +8,7 @@ export const MODALITIES = {
 }
 
 export const MODES = {
-  multimodal: { label: 'Multimodal', color: '#3987e5', blurb: 'image + details, cross-attention fusion' },
+  multimodal: { label: 'Multimodal', color: '#9085e9', blurb: 'image + details, cross-attention fusion' },
   image_only: { label: 'Image only', color: '#d95926', blurb: 'EfficientNet-B4 head' },
   text_only: { label: 'Details only', color: '#199e70', blurb: 'BioBERT head on the patient details' },
 }

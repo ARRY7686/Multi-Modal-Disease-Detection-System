@@ -9,7 +9,7 @@ const FREE_TEXT_EXAMPLES = [
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="eyebrow mb-1 block">{label}</span>
+      <span className="mb-1.5 block text-[11px] uppercase tracking-[0.12em] text-ink-muted">{label}</span>
       {children}
     </label>
   )
@@ -21,10 +21,10 @@ export default function PatientDetails({ modality, details, onChange }) {
   const generated = buildDetailsText({ modality, ...details })
 
   return (
-    <section className="card card-pad">
+    <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="card-title">Patient details</h2>
-        <div className="seg w-44 sm:w-52" role="tablist" aria-label="Input style">
+        <span className="eyebrow">Patient details</span>
+        <div className="toggle-group" role="tablist" aria-label="Input style">
           {[
             ['structured', 'Structured'],
             ['free', 'Free text'],
@@ -35,7 +35,7 @@ export default function PatientDetails({ modality, details, onChange }) {
               role="tab"
               aria-selected={details.kind === k}
               onClick={() => set({ kind: k })}
-              className={`seg-btn ${details.kind === k ? 'seg-btn-on' : ''}`}
+              className={`toggle ${details.kind === k ? 'toggle-on' : ''}`}
             >
               {label}
             </button>
@@ -87,23 +87,23 @@ export default function PatientDetails({ modality, details, onChange }) {
               </Field>
             )}
           </div>
-          <div className="mt-4 rounded-xl border border-line bg-surface-2 px-3 py-2.5">
-            <span className="eyebrow">Text sent to the model</span>
+          <div className="mt-4 border-l border-violet/60 pl-3">
+            <span className="text-[11px] uppercase tracking-[0.12em] text-ink-muted">Sent to the model</span>
             <p className="mt-1 font-mono text-xs text-ink-2">
-              {generated || <span className="text-ink-muted">none (image only)</span>}
+              {generated || <span className="text-ink-muted">nothing: image only</span>}
             </p>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+          <p className="mt-3 text-xs leading-relaxed text-ink-muted">
             {modality === 'auto' && 'Pick a modality to add the X-ray view or lesion site. '}
             {modality === 'brain'
               ? 'Brain MRIs came with no clinical details, so the model only ever saw this placeholder sentence.'
-              : 'Written in the exact sentence shape of the training metadata (age, sex, view or site).'}
+              : 'Same sentence shape as the training metadata.'}
           </p>
         </>
       ) : (
         <>
           <textarea
-            rows={4}
+            rows={3}
             value={details.text}
             onChange={(e) => set({ text: e.target.value })}
             placeholder="Clinical notes"
@@ -111,22 +111,17 @@ export default function PatientDetails({ modality, details, onChange }) {
           />
           <div className="mt-2 flex flex-wrap gap-2">
             {FREE_TEXT_EXAMPLES.map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => set({ text: ex })}
-                className="chip hover:border-ink-muted hover:text-ink"
-              >
+              <button key={ex} type="button" onClick={() => set({ text: ex })} className="chip hover:border-line-strong hover:text-ink">
                 {ex}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-status-warning">
-            The text model was trained only on age, sex and view or site sentences. Free-form symptoms are
-            outside what it learned, so expect weak text-only scores.
+          <p className="mt-3 text-xs leading-relaxed text-status-warning">
+            The text model only saw age, sex and view or site sentences in training. Free-form symptoms are outside
+            that, so expect weak details-only scores.
           </p>
         </>
       )}
-    </section>
+    </div>
   )
 }

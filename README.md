@@ -247,15 +247,17 @@ multimodalAI/
 │       ├── main.jsx                  # React entry point
 │       ├── index.css                 # Tailwind base + component classes, print styles
 │       ├── lib/domain.js             # Labels, mode colours, training-format detail sentences
+│       ├── lib/hotspot.js            # Finds the hottest region of a Grad-CAM overlay
 │       ├── hooks/useHistory.js       # Recent analyses in localStorage, thumbnails
 │       └── components/
-│           ├── ImageDropzone.jsx     # Drop / browse / paste image input
+│           ├── Header.jsx            # Hairline tabs, status, source link
+│           ├── Stage.jsx             # Centre stage: scan / Grad-CAM, hotspot, callouts and leader lines
+│           ├── Section.jsx           # Numbered glass section strip
 │           ├── ModalityPicker.jsx    # Auto / Chest / Skin / Brain
 │           ├── PatientDetails.jsx    # Structured details (age, sex, view / site) or free text
 │           ├── ResultsPanel.jsx      # Summary, warnings, export, and the panels below
 │           ├── PredictionList.jsx    # Confidence bars with per-class threshold ticks
 │           ├── CompareView.jsx       # Image only vs details only vs multimodal
-│           ├── HeatmapViewer.jsx     # Grad-CAM overlay, opacity, side by side, full screen
 │           ├── TextExplanation.jsx   # Highlighted text + word importance
 │           ├── HistoryPanel.jsx      # Recent analyses
 │           ├── ModelCard.jsx         # Test results, per-class AUROC, training curve (GET /model-info)
@@ -528,16 +530,16 @@ curl -X POST http://localhost:8000/predict-multimodal \
 
 ## Frontend Features
 
-A dark-theme React app (Vite + Tailwind) with three tabs: **Analyze**, **Model card** and **About** (`#model` and `#about` are linkable).
+A dark React app (Vite + Tailwind) in a violet glass style with three tabs: **Analyze**, **Model card** and **About** (`#model` and `#about` are linkable). The scan sits centre stage; after an analysis, callout cards for the top findings connect by leader lines to the Grad-CAM hotspot, which the browser finds in the overlay image.
 
 | Feature | Description |
 |---------|-------------|
-| **Image input** | Drag and drop, click to browse, or paste from the clipboard; preview with replace / remove |
+| **Image input** | Drop, browse or paste onto the centre stage; replace / remove |
 | **Structured patient details** | Age, sex and X-ray view or lesion site, turned into the exact sentence shape of the training metadata; the text sent to the model is shown. Free text is available, with a warning that it is outside what the text model learned |
 | **Modality selector** | Auto (modality classifier) or Chest / Skin / Brain |
 | **Compare all three modes** | Scores the same case image only, details only and fused, side by side (chart or table), with the modality fixed so all three rank the same classes |
 | **Predictions** | Top-5 classes with confidence bars, each class's validation-fitted threshold as a tick, and an "Above threshold" flag |
-| **Grad-CAM viewer** | Overlay with an opacity slider, side-by-side view and full-screen mode |
+| **Grad-CAM stage** | Overlay with a heat slider, original view, hotspot marker, callouts on leader lines, full screen |
 | **Text attention** | Highlighted text plus a ranked word-importance list |
 | **Model card** | Live from `GET /model-info`: held-out test table with 95% CIs, per-finding chest AUROC (multimodal vs image only), validation AUROC per epoch, data counts and evaluation protocol |
 | **History, export** | Last 12 analyses kept in the browser; download a result as JSON or print a report |

@@ -3,32 +3,55 @@
 @tailwind utilities;
 
 @layer base {
-  html, body { background: #0d0d0d; }
-  body { font-feature-settings: 'cv11', 'ss01'; }
-  ::selection { background: rgba(57, 135, 229, 0.35); }
-  :focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
-  * { scrollbar-width: thin; scrollbar-color: #383835 transparent; }
+  html, body { background: #0c0b12; }
+  body {
+    font-feature-settings: 'cv11', 'ss01';
+    /* Soft violet / magenta glows behind the whole app */
+    background-image:
+      radial-gradient(900px 600px at 78% 8%, rgba(144, 133, 233, 0.16), transparent 60%),
+      radial-gradient(700px 500px at 92% 40%, rgba(217, 70, 239, 0.10), transparent 60%),
+      radial-gradient(800px 600px at 0% 100%, rgba(144, 133, 233, 0.08), transparent 60%);
+  }
+  ::selection { background: rgba(144, 133, 233, 0.4); }
+  :focus-visible { outline: 1.5px solid #a99ff0; outline-offset: 3px; }
+  * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
 }
 
 @layer components {
-  .card { @apply rounded-2xl border border-line bg-surface; }
-  .card-pad { @apply p-5 sm:p-6; }
-  .card-title { @apply text-sm font-semibold tracking-wide text-ink; }
-  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40; }
-  .btn-primary { @apply btn bg-accent text-white hover:bg-accent-hover; }
-  .btn-ghost { @apply btn border border-line-strong text-ink-2 hover:bg-surface-2 hover:text-ink; }
-  .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1 text-xs text-ink-2; }
-  .field { @apply w-full rounded-xl border border-line-strong bg-surface-2 px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent; }
-  .seg { @apply flex rounded-xl border border-line-strong bg-surface-2 p-1; }
-  .seg-btn { @apply flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:text-ink; }
-  .seg-btn-on { @apply bg-surface-3 text-ink shadow-sm; }
+  .glass {
+    @apply rounded-3xl border border-line;
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+    backdrop-filter: blur(18px);
+  }
+  .glass-card {
+    @apply rounded-2xl border border-line;
+    background: rgba(23, 21, 31, 0.72);
+    backdrop-filter: blur(14px);
+  }
+  .eyebrow { @apply text-[11px] font-medium uppercase tracking-[0.16em] text-ink-muted; }
+  .display { @apply font-light tracking-tight text-ink; }
+  .pill {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line-strong px-5 py-2.5
+      text-[11px] font-medium uppercase tracking-[0.14em] text-ink transition-colors
+      hover:border-ink-2 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .pill-solid { @apply pill border-transparent bg-ink text-page hover:bg-white; }
+  .pill-sm { @apply px-3 py-1.5 text-[10px]; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-ink-2; }
+  .field {
+    @apply w-full rounded-xl border border-line bg-white/[0.03] px-3 py-2.5 text-sm text-ink
+      placeholder:text-ink-muted focus:border-violet focus:outline-none;
+  }
+  .toggle-group { @apply inline-flex rounded-full border border-line p-1; }
+  .toggle { @apply whitespace-nowrap rounded-full px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted transition-colors hover:text-ink; }
+  .toggle-on { @apply bg-white/[0.08] text-ink; }
+  .tri { @apply inline-block h-0 w-0 border-x-[5px] border-b-[8px] border-x-transparent; }
   .num { font-variant-numeric: tabular-nums; }
 }
 
 @media print {
-  html, body { background: #fff !important; color: #0b0b0b !important; }
+  html, body { background: #fff !important; background-image: none !important; color: #0b0b0b !important; }
   .no-print { display: none !important; }
-  .card { border-color: #ddd !important; background: #fff !important; break-inside: avoid; }
+  .glass, .glass-card { border-color: #ddd !important; background: #fff !important; backdrop-filter: none !important; break-inside: avoid; }
   .print-ink, .print-ink * { color: #0b0b0b !important; }
 }

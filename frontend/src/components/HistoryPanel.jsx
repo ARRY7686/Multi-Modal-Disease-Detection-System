@@ -2,17 +2,10 @@ import { MODES, pct, prettyLabel } from '../lib/domain'
 
 const time = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-export default function HistoryPanel({ entries, activeId, onSelect, onClear }) {
-  if (entries.length === 0) return null
+export default function HistoryPanel({ entries, activeId, onSelect }) {
   return (
-    <section className="card card-pad no-print">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="card-title">Recent analyses</h2>
-        <button type="button" onClick={onClear} className="text-xs text-ink-muted hover:text-ink">
-          Clear
-        </button>
-      </div>
-      <ul className="space-y-1">
+    <div>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {entries.map((e) => {
           const r = e.results[e.primary]
           const top = r?.predictions?.[0]
@@ -21,14 +14,14 @@ export default function HistoryPanel({ entries, activeId, onSelect, onClear }) {
               <button
                 type="button"
                 onClick={() => onSelect(e)}
-                className={`flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors ${
-                  e.id === activeId ? 'bg-surface-3' : 'hover:bg-surface-2'
+                className={`flex w-full items-center gap-3 rounded-2xl border p-2.5 text-left transition-colors ${
+                  e.id === activeId ? 'border-violet/60 bg-violet-soft' : 'border-line hover:border-line-strong'
                 }`}
               >
                 {e.thumb ? (
-                  <img src={e.thumb} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-black object-cover" />
+                  <img src={e.thumb} alt="" className="h-11 w-11 shrink-0 rounded-xl bg-black object-cover" />
                 ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-[10px] text-ink-muted">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-[10px] uppercase tracking-wider text-ink-muted">
                     text
                   </span>
                 )}
@@ -36,16 +29,15 @@ export default function HistoryPanel({ entries, activeId, onSelect, onClear }) {
                   <span className="block truncate text-sm text-ink">{top ? prettyLabel(top.disease) : 'No result'}</span>
                   <span className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: MODES[r?.mode]?.color }} />
-                    {MODES[r?.mode]?.label} · {top ? pct(top.confidence, 0) : ''}
+                    {MODES[r?.mode]?.label} · {top ? pct(top.confidence, 0) : ''} · {time(e.ts)}
                   </span>
                 </span>
-                <span className="num text-[11px] text-ink-muted">{time(e.ts)}</span>
               </button>
             </li>
           )
         })}
       </ul>
-      <p className="mt-2 text-[11px] text-ink-muted">Kept in this browser only. Heatmaps are not saved.</p>
-    </section>
+      <p className="mt-3 text-xs text-ink-muted">Kept in this browser only. Heatmaps are not saved.</p>
+    </div>
   )
 }
