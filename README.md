@@ -118,72 +118,75 @@ evaluated once. 95% bootstrap confidence intervals (500 resamples) in brackets.
 
 | Mode | Chest macro AUROC | Skin balanced acc. | Skin macro AUROC | Brain accuracy | Brain macro AUROC | ECE |
 |---|---|---|---|---|---|---|
-| **multimodal** | 0.755 [0.751, 0.759] | 0.608 [0.551, 0.671] | 0.954 [0.942, 0.965] | 0.958 | 0.992 [0.986, 0.997] | 0.011 |
-| **image only** | **0.759** [0.754, 0.763] | **0.640** [0.584, 0.700] | **0.957** | 0.945 | **0.993** | 0.013 |
-| **text only** | 0.597 [0.591, 0.602] | 0.202 [0.191, 0.214] | 0.774 | 0.304 | 0.500 | 0.028 |
+| **multimodal** | 0.775 [0.771, 0.779] | **0.613** [0.555, 0.670] | 0.957 [0.948, 0.965] | **0.954** | **0.993** [0.986, 0.998] | 0.006 |
+| **image only** | **0.781** [0.777, 0.785] | 0.605 [0.550, 0.661] | 0.957 [0.949, 0.964] | 0.939 | 0.992 [0.985, 0.997] | 0.006 |
+| **text only** | 0.599 [0.593, 0.605] | 0.194 [0.183, 0.205] | 0.794 | 0.304 | 0.500 | 0.026 |
 
 Test sets: 25,596 chest X-rays, 1,441 skin lesion photos, 457 brain MRIs. Model: EfficientNet-B4
-(380 px) + BioBERT with cross-attention fusion, trained for 8 epochs on 30% of the NIH training
-patients, all of HAM10000 train and brain train (about 2.5 h on one Kaggle T4).
-Modality classifier test accuracy: 0.9999.
+(380 px) + BioBERT with cross-attention fusion, trained for 6 epochs on all NIH training patients,
+all of HAM10000 train and brain train (about 5.2 h of training plus 1 h of evaluation on one Kaggle T4).
+Modality classifier test accuracy: 0.9965.
 
 **What these numbers say**
 
 - **The image does almost all the work.** Image-only and multimodal scores are within each other's
-  confidence intervals in every column. The recorded metadata adds no measurable accuracy on top of
-  the image: chest X-rays come with only age, sex and view position, and brain MRIs with nothing.
-- **Metadata alone is weak but not empty.** Age, sex and lesion site rank skin diagnoses at 0.77
+  confidence intervals on skin and brain, and on chest the image alone is slightly ahead (0.781 vs
+  0.775, intervals just touching). The recorded metadata adds no measurable accuracy on top of the
+  image: chest X-rays come with only age, sex and view position, and brain MRIs with nothing.
+- **Metadata alone is weak but not empty.** Age, sex and lesion site rank skin diagnoses at 0.79
   AUROC (site and age genuinely differ between melanoma, nevi and keratoses), and age plus view
   position give 0.60 on chest. Brain text-only is exactly chance (0.500), as it must be: every brain
   scan has the same placeholder text, which confirms the text carries no hidden label.
-- **The model is calibrated out of the box.** The fitted temperatures are 0.99-1.02, and the
-  expected calibration error is 0.011 before and after scaling, so the confidences the API returns
-  can be read as probabilities.
-- **On average the details add nothing; on single cases they can dominate.** Example: a clinical photo of a
+- **The model is calibrated out of the box.** The fitted temperatures are 1.02-1.04, and the
+  expected calibration error is 0.008 before scaling and 0.006 after, so the confidences the API
+  returns can be read as probabilities.
+- **On average the details add nothing; on single cases they can dominate.** Example (measured on the earlier
+  checkpoint trained on 30% of the chest patients): a clinical photo of a
   melanoma scores Melanoma 43.6% (above threshold) image-only, but with only "21-year-old male." as the details the
   fused model says Melanocytic Nevi 90.9% and Melanoma 3.1%. Adding a lesion site ("Lesion on the back.") brings
   Melanoma back to 68.5%. The fused model has learned HAM10000's age and site patterns (melanoma is rare in young
   patients) strongly enough to overrule the image. The app warns whenever the details change the top finding; the
   fix belongs in training (more text dropout, or capping how far the details can move the image's scores).
-- **Chest is the hard part.** 0.755 macro AUROC on the official patient-disjoint split, from 30% of
-  the training patients. The best findings are Hernia (0.85), Pneumothorax (0.82) and Edema (0.81);
-  the worst are Nodule (0.68) and Infiltration (0.70). Training on all patients is the main lever
-  (`--chest-train-fraction 1.0`).
+- **Chest is the hard part.** 0.775 macro AUROC (0.781 image only) on the official patient-disjoint
+  split. Training on all patients instead of 30% raised it from 0.755, with every interval clear of
+  the old one. The best findings are Emphysema (0.86), Hernia (0.85) and Pneumothorax (0.84); the
+  worst are Pneumonia (0.69), Nodule (0.70) and Infiltration (0.70).
 
 <details>
 <summary>Chest per-class AUROC</summary>
 
 | Finding | Multimodal | Image only |
 |---|---|---|
-| Atelectasis | 0.734 | 0.738 |
-| Cardiomegaly | 0.751 | 0.783 |
-| Effusion | 0.797 | 0.800 |
-| Infiltration | 0.696 | 0.695 |
-| Mass | 0.737 | 0.727 |
-| Nodule | 0.679 | 0.687 |
-| Pneumonia | 0.699 | 0.690 |
-| Pneumothorax | 0.816 | 0.823 |
-| Consolidation | 0.715 | 0.710 |
-| Edema | 0.811 | 0.818 |
-| Emphysema | 0.796 | 0.801 |
-| Fibrosis | 0.765 | 0.776 |
-| Pleural Thickening | 0.719 | 0.722 |
-| Hernia | 0.855 | 0.850 |
+| Atelectasis | 0.755 | 0.755 |
+| Cardiomegaly | 0.827 | 0.840 |
+| Effusion | 0.818 | 0.818 |
+| Infiltration | 0.703 | 0.701 |
+| Mass | 0.774 | 0.772 |
+| Nodule | 0.700 | 0.711 |
+| Pneumonia | 0.693 | 0.707 |
+| Pneumothorax | 0.844 | 0.849 |
+| Consolidation | 0.728 | 0.725 |
+| Edema | 0.817 | 0.826 |
+| Emphysema | 0.858 | 0.859 |
+| Fibrosis | 0.752 | 0.790 |
+| Pleural Thickening | 0.730 | 0.737 |
+| Hernia | 0.845 | 0.848 |
 
 </details>
 
 ### Training Convergence
 
 Validation macro AUROC over all 25 labels (chest, skin and brain pooled), 1 epoch with frozen
-backbones and then 7 fine-tuned:
+backbones and then 5 fine-tuned (about 50 min per epoch on a T4):
 
 | Epoch | Train loss | Multimodal | Image only | Text only |
 |---|---|---|---|---|
-| 1 (frozen) | 0.420 | 0.815 | 0.828 | 0.576 |
-| 2 | 0.356 | 0.864 | 0.882 | 0.596 |
-| 4 | 0.318 | 0.897 | 0.906 | 0.622 |
-| 6 | 0.294 | 0.909 | 0.916 | 0.625 |
-| 8 | 0.288 | 0.910 | 0.918 | 0.625 |
+| 1 (frozen) | 0.369 | 0.833 | 0.854 | 0.594 |
+| 2 | 0.328 | 0.890 | 0.898 | 0.604 |
+| 3 | 0.305 | 0.908 | 0.912 | 0.618 |
+| 4 | 0.289 | 0.920 | 0.918 | 0.619 |
+| 5 | 0.283 | 0.925 | 0.921 | 0.618 |
+| 6 | 0.279 | 0.926 | 0.921 | 0.621 |
 
 ### Brain MRI duplicates
 
@@ -360,13 +363,14 @@ it clones this repository and calls the training script.
 1. Create a Kaggle notebook from `kaggle_notebooks/train_v2.ipynb`, with **GPU T4** and **Internet on**.
 2. Add the input datasets `nih-chest-xrays/data`, `kmader/skin-cancer-mnist-ham10000` and
    `sartajbhuvaji/brain-tumor-classification-mri`.
-3. Run all (about 2.5-3 h on a T4 with the defaults). Download `models.zip` and unzip it into `models/`.
+3. Run all (about 2.5-3 h on a T4 with the defaults, which use 30% of the chest patients for 8 epochs;
+   the published weights use all of them for 6 epochs, about 6 h). Download `models.zip` and unzip it into `models/`.
 
 The same script runs anywhere the datasets are on disk:
 
 ```bash
 python -m training.train --data-root /path/to/datasets --out models \
-    --chest-train-fraction 0.3 --epochs 8
+    --chest-train-fraction 1.0 --epochs 6 --frozen-epochs 1   # the published weights
 python -m training.train --help   # every setting is a flag
 ```
 
@@ -733,7 +737,7 @@ All architecture, training, and inference settings are centralized in `configs/m
 
 | Dataset | Size | Classes | Modality | Source |
 |---------|------|---------|----------|--------|
-| [NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data) | 45.1 GB (30% used) | 14 | Chest X-ray | NIH Clinical Center |
+| [NIH ChestX-ray14](https://www.kaggle.com/datasets/nih-chest-xrays/data) | 45.1 GB (all used) | 14 | Chest X-ray | NIH Clinical Center |
 | [HAM10000](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000) | 2.9 GB | 7 | Dermoscopy | ISIC Archive |
 | [Brain Tumor Classification (MRI)](https://www.kaggle.com/datasets/sartajbhuvaji/brain-tumor-classification-mri) | ~90 MB | 4 | Brain MRI | Kaggle |
 | Paired text | From the dataset metadata | — | Clinical text | Age, sex and X-ray view (NIH); age, sex and lesion site (HAM10000) |

@@ -102,6 +102,8 @@ export default function App() {
   const [active, setActive] = useState(null)
   const [gallery, setGallery] = useState([])
   const [example, setExample] = useState(null) // gallery case the inputs came from
+  const [picking, setPicking] = useState(false) // an example's image is downloading
+  const inputsVersion = useRef(0) // bumped on every image change; stale results are dropped
   const previews = useRef({}) // entry id -> full-size image, this session only
   const history = useHistory()
 
@@ -136,6 +138,7 @@ export default function App() {
   }, [])
 
   const onImage = useCallback(async (f) => {
+    inputsVersion.current += 1
     setFile(f)
     setPreview(f ? await readDataUrl(f) : null)
     setExample(null)
@@ -146,10 +149,13 @@ export default function App() {
   // Load an example's image and recorded details, with the modality fixed so
   // the details sentence matches the one its cached results were computed on.
   const pickExample = async (c) => {
+    setPicking(true)
     try {
       await onImage(await exampleFile(c))
     } catch {
       return setError('Could not load that example.')
+    } finally {
+      setPicking(false)
     }
     setExample(c)
     setModality(c.modality)
@@ -158,11 +164,12 @@ export default function App() {
   }
 
   const text = details.kind === 'structured' ? buildDetailsText({ modality, ...details }) : details.text.trim()
-  const canRun = (file || text) && !loading && health !== false
+  const canRun = (file || text) && !loading && !picking && health !== false
   const willCompare = compare && file && text
 
   const run = useCallback(async () => {
     if (!file && !text) return setError('Add a scan, patient details, or both.')
+    const version = inputsVersion.current
     setLoading(true)
     setError(null)
     try {
@@ -178,6 +185,7 @@ export default function App() {
         if (img.status === 'fulfilled') results.image_only = img.value
         if (txt.status === 'fulfilled') results.text_only = txt.value
       }
+      if (version !== inputsVersion.current) return // the image changed while this ran
       const entry = {
         id: `${Date.now()}`,
         ts: Date.now(),
@@ -195,7 +203,7 @@ export default function App() {
       history.add(entry)
       setActive(entry)
     } catch (e) {
-      setError(errorMessage(e))
+      if (version === inputsVersion.current) setError(errorMessage(e))
     } finally {
       setLoading(false)
     }
@@ -290,7 +298,7 @@ export default function App() {
                     .
                   </p>
                 )}
-                <Examples cases={gallery} activeId={example?.id} onPick={pickExample} busy={loading} />
+                <Examples cases={gallery} activeId={example?.id} onPick={pickExample} busy={loading || picking} />
                 <ModalityPicker value={modality} onChange={setModality} />
                 <PatientDetails modality={modality} details={details} onChange={setDetails} />
                 <label className="flex cursor-pointer items-start gap-3">
