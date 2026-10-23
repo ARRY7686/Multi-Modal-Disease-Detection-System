@@ -141,6 +141,21 @@ def test_thresholds_from_training_metadata(tiny_cfg):
     assert all(p["threshold"] == tiny_cfg.confidence_threshold for p in image["predictions"])
 
 
+def test_flagged_findings_rank_first(tiny_cfg):
+    start, end = tiny_cfg.modality_index_range("chest")
+    flagged = end - 1
+    thresholds = [1.0] * 25
+    thresholds[flagged] = 0.0  # only this class can be above its threshold
+    svc = build_service(tiny_cfg, metadata={"thresholds": {"text_only": thresholds}})
+    with TestClient(create_app(service=svc, cfg=tiny_cfg)) as client:
+        body = client.post("/predict", data={"symptoms": "fever and cough", "modality": "chest"}).json()
+
+    first, *rest = body["predictions"]
+    assert first["label_index"] == flagged and first["positive"]
+    assert [p["confidence"] for p in rest] == sorted((p["confidence"] for p in rest), reverse=True)
+    assert body["explanation"]["heatmap_class"] is None  # text only: nothing to explain
+
+
 def test_warns_when_checkpoint_scored_badly_in_mode(tiny_cfg):
     metadata = {"training_results": {"image_only": {"auc": 0.46}, "multimodal": {"auc": 0.99}}}
     svc = build_service(tiny_cfg, metadata=metadata)

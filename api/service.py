@@ -392,7 +392,10 @@ class InferenceService:
             )
             for i in range(start, end)
         ]
-        scores.sort(key=lambda s: s.confidence, reverse=True)
+        # Flagged findings first: in multi-label chest scores the highest raw score is
+        # often below its threshold while a rarer finding is above its own, and the
+        # first entry is what the UI calls the top finding and Grad-CAM explains.
+        scores.sort(key=lambda s: (s.positive, s.confidence), reverse=True)
         return scores[: self.cfg.top_k_predictions]
 
     def _heatmap(
