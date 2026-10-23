@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+@layer base {
+  html, body { background: #0d0d0d; }
+  body { font-feature-settings: 'cv11', 'ss01'; }
+  ::selection { background: rgba(57, 135, 229, 0.35); }
+  :focus-visible { outline: 2px solid #3987e5; outline-offset: 2px; }
+  * { scrollbar-width: thin; scrollbar-color: #383835 transparent; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface; }
+  .card-pad { @apply p-5 sm:p-6; }
+  .card-title { @apply text-sm font-semibold tracking-wide text-ink; }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40; }
+  .btn-primary { @apply btn bg-accent text-white hover:bg-accent-hover; }
+  .btn-ghost { @apply btn border border-line-strong text-ink-2 hover:bg-surface-2 hover:text-ink; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1 text-xs text-ink-2; }
+  .field { @apply w-full rounded-xl border border-line-strong bg-surface-2 px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent; }
+  .seg { @apply flex rounded-xl border border-line-strong bg-surface-2 p-1; }
+  .seg-btn { @apply flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:text-ink; }
+  .seg-btn-on { @apply bg-surface-3 text-ink shadow-sm; }
+  .num { font-variant-numeric: tabular-nums; }
+}
+
+@media print {
+  html, body { background: #fff !important; color: #0b0b0b !important; }
+  .no-print { display: none !important; }
+  .card { border-color: #ddd !important; background: #fff !important; break-inside: avoid; }
+  .print-ink, .print-ink * { color: #0b0b0b !important; }
 }

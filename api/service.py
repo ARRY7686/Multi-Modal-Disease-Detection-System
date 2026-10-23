@@ -176,7 +176,8 @@ class InferenceService:
         self.device = device
 
         metadata = metadata or {}
-        self.thresholds = parse_thresholds(metadata, cfg.num_classes, cfg.confidence_threshold)
+        self.metadata = metadata
+        self.thresholds =parse_thresholds(metadata, cfg.num_classes, cfg.confidence_threshold)
         self.mode_val_auc: Dict[str, float] = {
             mode: float(res["auc"])
             for mode, res in metadata.get("training_results", {}).items()

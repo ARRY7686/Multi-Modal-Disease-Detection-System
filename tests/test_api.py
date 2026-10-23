@@ -181,3 +181,46 @@ def test_upload_size_limit(tiny_cfg):
     with TestClient(create_app(service=svc, cfg=tiny_cfg)) as client:
         big = {"image": ("big.png", b"0" * (1024 * 1024 + 1), "image/png")}
         assert client.post("/predict", files=big).status_code == 413
+
+
+# ── Model info / static frontend ─────────────────────────────────────────────
+
+def test_model_info_reports_checkpoint_metadata(tiny_cfg):
+    metadata = {
+        "image_backbone": "efficientnet_b4",
+        "training_results": {"multimodal": {"auc": 0.9, "chest": {"macro_auroc": 0.8}}},
+        "temperatures": {"multimodal": 1.01},
+        "data_counts": {"test": {"chest": 10, "skin": 5, "brain": 3}},
+        "settings": {"chest_train_fraction": 1.0, "epochs": 6},
+    }
+    svc = build_service(tiny_cfg, metadata=metadata)
+    with TestClient(create_app(service=svc, cfg=tiny_cfg)) as client:
+        body = client.get("/model-info").json()
+    assert body["weights_loaded"] is True
+    assert body["image_backbone"] == "efficientnet_b4"
+    assert body["test_results"]["multimodal"]["chest"]["macro_auroc"] == 0.8
+    assert body["data_counts"]["test"]["chest"] == 10
+    assert (body["chest_train_fraction"], body["epochs"]) == (1.0, 6)
+
+
+def test_model_info_hides_metadata_of_unloaded_checkpoint(tiny_cfg):
+    svc = build_service(
+        tiny_cfg,
+        metadata={"training_results": {"multimodal": {"auc": 0.9}}},
+        weights_loaded={"fusion_model": False, "modality_classifier": True},
+    )
+    with TestClient(create_app(service=svc, cfg=tiny_cfg)) as client:
+        body = client.get("/model-info").json()
+    assert body["weights_loaded"] is False
+    assert body["test_results"] == {}
+
+
+def test_serves_built_frontend_without_shadowing_the_api(service, tiny_cfg, tmp_path):
+    (tmp_path / "index.html").write_text("<html>app</html>", encoding="utf-8")
+    with TestClient(create_app(service=service, cfg=tiny_cfg, static_dir=tmp_path)) as client:
+        assert "app" in client.get("/").text
+        assert client.get("/health").json()["status"] == "ok"
+
+
+def test_no_frontend_route_without_a_build(client):
+    assert client.get("/").status_code == 404

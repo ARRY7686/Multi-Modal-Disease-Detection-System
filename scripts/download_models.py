@@ -1,7 +1,8 @@
 r"""
-Download trained model weights from Kaggle to the local models/ directory.
+Download trained model weights to the local models/ directory.
 
 Usage:
+    python scripts/download_models.py --hf-repo YOUR_USERNAME/multimodal-disease-detection
     python scripts/download_models.py --kaggle-dataset YOUR_USERNAME/multimodal-disease-weights
 
 Requires the Kaggle API key to be configured:
@@ -44,6 +45,20 @@ def download_from_kaggle(dataset_slug: str, dest: Path):
     return True
 
 
+def download_from_hf(repo_id: str, dest: Path):
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        print("ERROR: huggingface_hub not installed. Run: pip install huggingface_hub")
+        return False
+
+    print(f"Downloading model repo: {repo_id}")
+    print(f"Destination: {dest}")
+    snapshot_download(repo_id=repo_id, local_dir=str(dest), allow_patterns=EXPECTED_FILES + ["tokenizer/*"])
+    print("Download complete.")
+    return True
+
+
 def verify_files(dest: Path):
     print("\nVerifying model files:")
     missing = []
@@ -62,7 +77,12 @@ def verify_files(dest: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download trained model weights from Kaggle.")
+    parser = argparse.ArgumentParser(description="Download trained model weights.")
+    parser.add_argument(
+        "--hf-repo",
+        type=str,
+        help="Hugging Face model repo id (e.g., 'username/multimodal-disease-detection')",
+    )
     parser.add_argument(
         "--kaggle-dataset",
         type=str,
@@ -95,11 +115,14 @@ def main():
                 shutil.copytree(item, dst_path, dirs_exist_ok=True)
             else:
                 shutil.copy2(item, dst_path)
+    elif args.hf_repo:
+        if not download_from_hf(args.hf_repo, dest):
+            return
     elif args.kaggle_dataset:
         if not download_from_kaggle(args.kaggle_dataset, dest):
             return
     else:
-        print("Provide --kaggle-dataset or --local-dir. Run with --help for details.")
+        print("Provide --hf-repo, --kaggle-dataset or --local-dir. Run with --help for details.")
         return
 
     verify_files(dest)

@@ -239,19 +239,28 @@ multimodalAI/
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.js
-│   ├── tailwind.config.js
+│   ├── tailwind.config.js            # Dark theme tokens (surfaces, ink, mode colours)
 │   ├── postcss.config.js
 │   └── src/
-│       ├── App.jsx                   # Main app — state, routing, layout
-│       ├── api.js                    # Axios API client
+│       ├── App.jsx                   # Tabs (Analyze / Model card / About), analysis flow, history
+│       ├── api.js                    # Axios API client (same-origin in Docker)
 │       ├── main.jsx                  # React entry point
-│       ├── index.css                 # Tailwind base styles
+│       ├── index.css                 # Tailwind base + component classes, print styles
+│       ├── lib/domain.js             # Labels, mode colours, training-format detail sentences
+│       ├── hooks/useHistory.js       # Recent analyses in localStorage, thumbnails
 │       └── components/
-│           ├── ImageUpload.jsx       # Drag-and-drop image upload with preview
-│           ├── SymptomInput.jsx      # Symptom text area + quick examples
-│           ├── PredictionResults.jsx # Confidence bar chart with color coding
-│           ├── HeatmapViewer.jsx     # Grad-CAM overlay with toggle
-│           └── ExplanationPanel.jsx  # Highlighted text + token importance
+│           ├── ImageDropzone.jsx     # Drop / browse / paste image input
+│           ├── ModalityPicker.jsx    # Auto / Chest / Skin / Brain
+│           ├── PatientDetails.jsx    # Structured details (age, sex, view / site) or free text
+│           ├── ResultsPanel.jsx      # Summary, warnings, export, and the panels below
+│           ├── PredictionList.jsx    # Confidence bars with per-class threshold ticks
+│           ├── CompareView.jsx       # Image only vs details only vs multimodal
+│           ├── HeatmapViewer.jsx     # Grad-CAM overlay, opacity, side by side, full screen
+│           ├── TextExplanation.jsx   # Highlighted text + word importance
+│           ├── HistoryPanel.jsx      # Recent analyses
+│           ├── ModelCard.jsx         # Test results, per-class AUROC, training curve (GET /model-info)
+│           ├── About.jsx             # What it is, the leakage story, disclaimer
+│           └── Icons.jsx             # Inline SVG icons
 │
 ├── training/                         # Honest training pipeline (imports api/models)
 │   ├── data.py                       # Loaders, patient-disjoint splits, metadata -> text
@@ -286,7 +295,8 @@ multimodalAI/
 │   └── synthetic_symptoms.py         # Clinical symptom text generation
 │
 ├── scripts/
-│   ├── download_models.py            # Download weights from Kaggle
+│   ├── download_models.py            # Download weights (Hugging Face Hub, Kaggle or a local folder)
+│   ├── publish_hf.py                 # Publish weights + the Docker Space to the Hub
 │   └── setup.sh                      # One-command project setup
 │
 ├── tests/                            # pytest suite on tiny offline models (no downloads)
@@ -370,6 +380,20 @@ npm run dev
 
 Open **http://localhost:5173** in your browser.
 
+### Docker / Hugging Face Space
+
+The `Dockerfile` builds the React app and serves it from FastAPI on one port, pulling the trained weights
+from a Hugging Face model repo at build time:
+
+```bash
+docker build -t mmdd .                                  # MODEL_REPO build arg picks the weights repo
+docker run -p 7860:7860 mmdd                             # http://localhost:7860
+
+hf auth login                                            # write token, once
+python scripts/publish_hf.py weights --repo USER/multimodal-disease-detection
+python scripts/publish_hf.py space --repo USER/Multi-Modal-Disease-Detection --model-repo USER/multimodal-disease-detection
+```
+
 ### Running Tests
 
 The test suite builds the same architecture at toy size (EfficientNet-B0 at 64 px, a 2-layer
@@ -396,8 +420,15 @@ On first startup, the API will download **EfficientNet-B4** (~75 MB) and **BioBE
 |--------|------|-------------|
 | `GET` | `/health` | Health check — returns model load status |
 | `GET` | `/labels` | All 25 disease labels grouped by modality |
+| `GET` | `/model-info` | Loaded checkpoint, held-out test results and training history |
 | `POST` | `/predict` | Flexible prediction — auto-detects mode (image-only, text-only, or multimodal) |
 | `POST` | `/predict-multimodal` | Full multimodal prediction (requires both image + symptom text) |
+
+### `GET /model-info`
+
+What the loaded checkpoint is and how it scored: per-mode held-out test results (with confidence intervals),
+temperatures, data counts, evaluation protocol and training history, read from `models/multimodal_config.json`.
+Empty when no trained weights are loaded.
 
 ### `POST /predict`
 
@@ -497,16 +528,20 @@ curl -X POST http://localhost:8000/predict-multimodal \
 
 ## Frontend Features
 
+A dark-theme React app (Vite + Tailwind) with three tabs: **Analyze**, **Model card** and **About** (`#model` and `#about` are linkable).
+
 | Feature | Description |
 |---------|-------------|
-| **Drag-and-drop image upload** | Upload medical images with instant preview and file size validation |
-| **Symptom text input** | Free-text clinical description with pre-filled quick examples |
-| **Modality selector** | Manual override buttons (Auto-detect / Chest / Skin / Brain) |
-| **Prediction results** | Top-5 predictions with color-coded confidence bars (red ≥80%, orange ≥50%, yellow ≥30%, green <30%) |
-| **Grad-CAM heatmap** | Interactive overlay with Show Original / Heatmap Overlay toggle |
-| **Text explanation** | Highlighted symptom text with the most important tokens bolded + token importance chips |
-| **API status indicator** | Live health check indicator showing API Online/Offline state |
-| **Auto mode detection** | Displays current mode (Image only / Text only / Multimodal) based on provided inputs |
+| **Image input** | Drag and drop, click to browse, or paste from the clipboard; preview with replace / remove |
+| **Structured patient details** | Age, sex and X-ray view or lesion site, turned into the exact sentence shape of the training metadata; the text sent to the model is shown. Free text is available, with a warning that it is outside what the text model learned |
+| **Modality selector** | Auto (modality classifier) or Chest / Skin / Brain |
+| **Compare all three modes** | Scores the same case image only, details only and fused, side by side (chart or table), with the modality fixed so all three rank the same classes |
+| **Predictions** | Top-5 classes with confidence bars, each class's validation-fitted threshold as a tick, and an "Above threshold" flag |
+| **Grad-CAM viewer** | Overlay with an opacity slider, side-by-side view and full-screen mode |
+| **Text attention** | Highlighted text plus a ranked word-importance list |
+| **Model card** | Live from `GET /model-info`: held-out test table with 95% CIs, per-finding chest AUROC (multimodal vs image only), validation AUROC per epoch, data counts and evaluation protocol |
+| **History, export** | Last 12 analyses kept in the browser; download a result as JSON or print a report |
+| **Status and shortcuts** | Health indicator (models loaded / no trained weights / offline), Ctrl + Enter to analyze |
 
 ---
 

@@ -8,15 +8,18 @@ models and does the actual prediction and explanation work.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from api.config import Config
-from api.schemas import HealthResponse, LabelResponse, PredictionResponse
+from api.config import PROJECT_ROOT, Config
+from api.schemas import HealthResponse, LabelResponse, ModelInfoResponse, PredictionResponse
 from api.service import InferenceService, InvalidInput
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -35,14 +38,17 @@ def _read_upload(upload: Optional[UploadFile], max_bytes: int) -> Optional[bytes
 def create_app(
     service: Optional[InferenceService] = None,
     cfg: Optional[Config] = None,
+    static_dir: Optional[Path] = None,
 ) -> FastAPI:
     """
     Build the FastAPI app.
 
     Args:
-        service: a ready InferenceService (tests pass one built from tiny
-                 models); when None, one is loaded from disk at startup.
-        cfg:     configuration; defaults to configs/model_config.yaml
+        service:    a ready InferenceService (tests pass one built from tiny
+                    models); when None, one is loaded from disk at startup.
+        cfg:        configuration; defaults to configs/model_config.yaml
+        static_dir: built frontend (frontend/dist) to serve at "/"; nothing
+                    is served when it has no index.html
     """
     cfg = cfg or Config.get()
     max_upload_bytes = cfg.max_upload_size_mb * 1024 * 1024
@@ -99,6 +105,26 @@ def create_app(
             },
         )
 
+    @app.get("/model-info", response_model=ModelInfoResponse)
+    def model_info(request: Request):
+        svc: InferenceService = request.app.state.service
+        meta = svc.metadata if svc.weights_loaded.get("fusion_model") else {}
+        settings = meta.get("settings") or {}
+        return ModelInfoResponse(
+            weights_loaded=bool(svc.weights_loaded.get("fusion_model")),
+            image_backbone=meta.get("image_backbone"),
+            text_model_name=meta.get("text_model_name"),
+            fusion_type=meta.get("fusion_type"),
+            test_results=meta.get("training_results") or {},
+            temperatures=meta.get("temperatures") or {},
+            modality_classifier_test_accuracy=meta.get("modality_classifier_test_accuracy"),
+            evaluation_protocol=meta.get("evaluation_protocol") or {},
+            data_counts=meta.get("data_counts") or {},
+            training_history=meta.get("training_history") or [],
+            chest_train_fraction=settings.get("chest_train_fraction"),
+            epochs=settings.get("epochs"),
+        )
+
     @app.post("/predict", response_model=PredictionResponse)
     def predict(
         request: Request,
@@ -123,10 +149,16 @@ def create_app(
             _read_upload(image, max_upload_bytes), symptoms, modality, require_both=True,
         )
 
+    # Single-container deployment (Docker / HF Space): serve the built React
+    # app from the same origin. Mounted last so the API routes above win.
+    if static_dir is not None and (static_dir / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+        logger.info("Serving frontend from %s", static_dir)
+
     return app
 
 
-app = create_app()
+app = create_app(static_dir=Path(os.environ.get("FRONTEND_DIST", PROJECT_ROOT / "frontend" / "dist")))
 
 
 if __name__ == "__main__":

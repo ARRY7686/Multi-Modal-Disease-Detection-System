@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -72,3 +72,21 @@ class HealthResponse(BaseModel):
 class LabelResponse(BaseModel):
     labels: List[str]
     modality_groups: Dict[str, List[str]]
+
+
+class ModelInfoResponse(BaseModel):
+    """What the loaded checkpoint is and how it scored (models/multimodal_config.json)."""
+    weights_loaded: bool
+    image_backbone: Optional[str] = None
+    text_model_name: Optional[str] = None
+    fusion_type: Optional[str] = None
+    test_results: Dict[str, Any] = Field(
+        default_factory=dict, description="Per-mode held-out test metrics, as written by training"
+    )
+    temperatures: Dict[str, float] = Field(default_factory=dict)
+    modality_classifier_test_accuracy: Optional[float] = None
+    evaluation_protocol: Dict[str, str] = Field(default_factory=dict)
+    data_counts: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+    training_history: List[Dict[str, Any]] = Field(default_factory=list)
+    chest_train_fraction: Optional[float] = None
+    epochs: Optional[int] = None

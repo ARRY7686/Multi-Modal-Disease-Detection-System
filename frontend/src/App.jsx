@@ -1,242 +1,286 @@
-import { useState, useEffect } from 'react'
-import ImageUpload from './components/ImageUpload'
-import SymptomInput from './components/SymptomInput'
-import PredictionResults from './components/PredictionResults'
-import HeatmapViewer from './components/HeatmapViewer'
-import ExplanationPanel from './components/ExplanationPanel'
-import { predict, predictMultimodal, checkHealth } from './api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { checkHealth, errorMessage, predict } from './api'
+import About from './components/About'
+import HistoryPanel from './components/HistoryPanel'
+import { Alert, Github, Layers, Pulse, Spark } from './components/Icons'
+import ImageDropzone from './components/ImageDropzone'
+import ModalityPicker from './components/ModalityPicker'
+import ModelCard from './components/ModelCard'
+import PatientDetails from './components/PatientDetails'
+import ResultsPanel from './components/ResultsPanel'
+import useHistory, { thumbnail } from './hooks/useHistory'
+import { buildDetailsText } from './lib/domain'
+
+const TABS = [
+  ['analyze', 'Analyze'],
+  ['model', 'Model card'],
+  ['about', 'About'],
+]
+const tabFromHash = () => {
+  const h = window.location.hash.slice(1)
+  return TABS.some(([k]) => k === h) ? h : 'analyze'
+}
+const EMPTY_DETAILS = { kind: 'structured', age: '', sex: '', view: '', site: '', text: '' }
+
+function readDataUrl(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.readAsDataURL(file)
+  })
+}
+
+function StatusPill({ health }) {
+  const state = health === null ? 'checking' : health === false ? 'offline' : health.status
+  const style = {
+    checking: ['bg-ink-muted animate-pulse', 'Connecting'],
+    offline: ['bg-status-critical', 'API offline'],
+    degraded: ['bg-status-warning', 'No trained weights'],
+    ok: ['bg-status-good', 'Models loaded'],
+  }[state]
+  return (
+    <span className="chip">
+      <span className={`h-2 w-2 rounded-full ${style[0]}`} />
+      {style[1]}
+    </span>
+  )
+}
 
 export default function App() {
-  const [image, setImage] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
-  const [symptoms, setSymptoms] = useState('')
+  const [tab, setTabState] = useState(tabFromHash)
+  const [health, setHealth] = useState(null)
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
   const [modality, setModality] = useState('auto')
-  const [result, setResult] = useState(null)
+  const [details, setDetails] = useState(EMPTY_DETAILS)
+  const [compare, setCompare] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [apiStatus, setApiStatus] = useState('checking')
+  const [active, setActive] = useState(null)
+  const previews = useRef({}) // entry id -> full-size image, this session only
+  const resultsRef = useRef(null)
+  const history = useHistory()
 
+  // Tabs live in the URL hash, so #model and #about are linkable
+  const setTab = (k) => {
+    window.history.replaceState(null, '', k === 'analyze' ? window.location.pathname : `#${k}`)
+    setTabState(k)
+  }
   useEffect(() => {
-    checkHealth()
-      .then(() => setApiStatus('online'))
-      .catch(() => setApiStatus('offline'))
+    const onHash = () => setTabState(tabFromHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  const handleImageChange = (file) => {
-    setImage(file)
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => setImagePreview(reader.result)
-      reader.readAsDataURL(file)
-    } else {
-      setImagePreview(null)
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      checkHealth()
+        .then((h) => alive && setHealth(h))
+        .catch(() => alive && setHealth(false))
+    poll()
+    const id = setInterval(poll, 30000)
+    return () => {
+      alive = false
+      clearInterval(id)
     }
-    setResult(null)
+  }, [])
+
+  const onImage = async (f) => {
+    setFile(f)
+    setPreview(f ? await readDataUrl(f) : null)
     setError(null)
   }
 
-  const handleSubmit = async () => {
-    if (!image && !symptoms.trim()) {
-      setError('Please provide an image and/or symptoms.')
-      return
-    }
+  const text = details.kind === 'structured' ? buildDetailsText({ modality, ...details }) : details.text.trim()
+  const canRun = (file || text) && !loading && health !== false
+  const willCompare = compare && file && text
+
+  const run = useCallback(async () => {
+    if (!file && !text) return setError('Add an image, patient details, or both.')
     setLoading(true)
     setError(null)
-    setResult(null)
     try {
-      let data
-      if (image && symptoms.trim()) {
-        data = await predictMultimodal({ image, symptoms: symptoms.trim(), modality })
-      } else {
-        data = await predict({ image, symptoms: symptoms.trim() || undefined, modality })
+      const first = await predict({ image: file, symptoms: text, modality })
+      const results = { [first.mode]: first }
+      if (willCompare) {
+        // Score the same case each way, with the modality fixed to the one the
+        // multimodal call used so all three rank the same classes.
+        const [img, txt] = await Promise.allSettled([
+          predict({ image: file, modality: first.modality }),
+          predict({ symptoms: text, modality: first.modality }),
+        ])
+        if (img.status === 'fulfilled') results.image_only = img.value
+        if (txt.status === 'fulfilled') results.text_only = txt.value
       }
-      setResult(data)
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      // FastAPI validation errors return a list of {loc, msg} objects
-      const message = Array.isArray(detail) ? detail.map((d) => d.msg).join('; ') : detail
-      setError(message || err.message || 'Prediction failed.')
+      const entry = {
+        id: `${Date.now()}`,
+        ts: Date.now(),
+        primary: first.mode,
+        results,
+        input: { modality, text, fileName: file?.name || null },
+        thumb: await thumbnail(preview),
+      }
+      previews.current[entry.id] = preview
+      history.add(entry)
+      setActive(entry)
+      // Single-column layout: results render below the inputs
+      if (window.innerWidth < 1024) {
+        requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      }
+    } catch (e) {
+      setError(errorMessage(e))
     } finally {
       setLoading(false)
     }
-  }
+  }, [file, text, modality, willCompare, preview, history])
 
-  const handleClear = () => {
-    setImage(null)
-    setImagePreview(null)
-    setSymptoms('')
+  // Ctrl/Cmd + Enter runs the analysis
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && tab === 'analyze' && canRun) run()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [run, canRun, tab])
+
+  const reset = () => {
+    onImage(null)
+    setDetails(EMPTY_DETAILS)
     setModality('auto')
-    setResult(null)
+    setActive(null)
     setError(null)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Multi-Modal Disease Detection
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              AI-powered analysis of medical images &amp; patient symptoms
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-block w-2.5 h-2.5 rounded-full ${
-                apiStatus === 'online'
-                  ? 'bg-green-500'
-                  : apiStatus === 'offline'
-                  ? 'bg-red-500'
-                  : 'bg-yellow-400 animate-pulse'
-              }`}
-            />
-            <span className="text-xs text-gray-500 uppercase tracking-wide">
-              API {apiStatus}
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-30 border-b border-line bg-page/85 backdrop-blur no-print">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="rounded-xl bg-accent-soft p-2 text-accent">
+              <Pulse className="h-5 w-5" />
             </span>
+            <div>
+              <div className="text-sm font-semibold text-ink">Multi-Modal Disease Detection</div>
+              <div className="text-xs text-ink-muted">Image + patient details · 25 findings · Grad-CAM</div>
+            </div>
+          </div>
+          <nav className="seg order-3 w-full sm:order-none sm:w-auto" aria-label="Sections">
+            {TABS.map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setTab(k)}
+                className={`seg-btn px-4 ${tab === k ? 'seg-btn-on' : ''}`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="flex items-center gap-2">
+            <StatusPill health={health} />
+            <a
+              href="https://github.com/ARRY7686/Multi-Modal-Disease-Detection-System"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg p-2 text-ink-2 hover:bg-surface-2 hover:text-ink"
+              aria-label="GitHub repository"
+            >
+              <Github />
+            </a>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* ── Left Column: Inputs ──────────────────────────── */}
-          <div className="space-y-6">
-            <ImageUpload
-              onImageChange={handleImageChange}
-              preview={imagePreview}
-            />
-            <SymptomInput value={symptoms} onChange={setSymptoms} />
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {tab === 'analyze' && (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <div className="space-y-6 no-print">
+              <ImageDropzone preview={preview} fileName={file?.name} onChange={onImage} />
+              <ModalityPicker value={modality} onChange={setModality} />
+              <PatientDetails modality={modality} details={details} onChange={setDetails} />
 
-            {/* Modality Selector */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Image Modality
-              </label>
-              <div className="flex gap-2 flex-wrap">
-                {['auto', 'chest', 'skin', 'brain'].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setModality(m)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      modality === m
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {m === 'auto' ? 'Auto-detect' : m.charAt(0).toUpperCase() + m.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleSubmit}
-                disabled={loading || apiStatus !== 'online'}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400
-                           text-white font-medium py-3 px-6 rounded-lg transition-colors
-                           flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12" cy="12" r="10"
-                        stroke="currentColor" strokeWidth="4" fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    Analyzing...
-                  </>
-                ) : (
-                  'Analyze'
-                )}
-              </button>
-              <button
-                onClick={handleClear}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg
-                           hover:bg-gray-100 transition-colors font-medium"
-              >
-                Clear
-              </button>
-            </div>
-
-            {/* Mode indicator */}
-            <div className="text-xs text-gray-400 text-center">
-              {image && symptoms.trim()
-                ? 'Mode: Multimodal (image + text)'
-                : image
-                ? 'Mode: Image only'
-                : symptoms.trim()
-                ? 'Mode: Text only'
-                : 'Upload an image and/or enter symptoms'}
-            </div>
-          </div>
-
-          {/* ── Right Column: Results ────────────────────────── */}
-          <div className="space-y-6">
-            {result && (
-              <>
-                {result.warnings?.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-sm space-y-1">
-                    {result.warnings.map((w, i) => (
-                      <p key={i}>{w}</p>
-                    ))}
+              <section className="card card-pad space-y-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={compare}
+                    onChange={(e) => setCompare(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#3987e5]"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-sm text-ink">
+                      <Layers className="h-4 w-4 text-ink-2" /> Compare all three modes
+                    </span>
+                    <span className="block text-xs text-ink-muted">
+                      With an image and details, also score image only and details only.
+                    </span>
+                  </span>
+                </label>
+                {error && (
+                  <div className="flex gap-2 rounded-xl border border-status-critical/40 bg-status-critical/10 p-3 text-sm text-ink-2">
+                    <Alert className="mt-0.5 h-4 w-4 shrink-0 text-status-critical" />
+                    {error}
                   </div>
                 )}
-                <PredictionResults result={result} />
-                {result.explanation?.heatmap_base64 && (
-                  <HeatmapViewer
-                    heatmapBase64={result.explanation.heatmap_base64}
-                    heatmapClass={result.explanation.heatmap_class}
-                    originalImage={imagePreview}
-                  />
-                )}
-                {result.explanation && (
-                  <ExplanationPanel explanation={result.explanation} />
-                )}
-              </>
-            )}
-            {!result && !loading && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-400">
-                <svg
-                  className="mx-auto h-16 w-16 mb-4 text-gray-300"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 
-                       17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 
-                       00-2 2v10a2 2 0 002 2z"
-                  />
-                </svg>
-                <p className="font-medium">Results will appear here</p>
-                <p className="text-sm mt-1">
-                  Submit an image and/or symptoms to get predictions
+                <div className="flex gap-3">
+                  <button type="button" onClick={run} disabled={!canRun} className="btn-primary flex-1">
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Analyzing
+                      </>
+                    ) : (
+                      <>
+                        <Spark /> Analyze
+                      </>
+                    )}
+                  </button>
+                  <button type="button" onClick={reset} className="btn-ghost">
+                    Reset
+                  </button>
+                </div>
+                <p className="text-center text-[11px] text-ink-muted">
+                  {file && text ? 'Multimodal' : file ? 'Image only' : text ? 'Details only' : 'No input yet'}
+                  {' · '}
+                  <kbd className="rounded border border-line-strong px-1">Ctrl</kbd> +{' '}
+                  <kbd className="rounded border border-line-strong px-1">Enter</kbd>
                 </p>
-              </div>
-            )}
+              </section>
+
+              <HistoryPanel
+                entries={history.entries}
+                activeId={active?.id}
+                onSelect={setActive}
+                onClear={history.clear}
+              />
+            </div>
+
+            <div ref={resultsRef} className="scroll-mt-24">
+              {active ? (
+                <ResultsPanel entry={active} original={previews.current[active.id] || active.thumb} />
+              ) : (
+                <div className="card flex min-h-[28rem] flex-col items-center justify-center p-10 text-center">
+                  <span className="mb-4 rounded-2xl bg-surface-3 p-4 text-ink-2">
+                    <Pulse className="h-7 w-7" />
+                  </span>
+                  <p className="text-base font-medium text-ink">{loading ? 'Running the models' : 'Results appear here'}</p>
+                  <p className="mt-1 max-w-sm text-sm text-ink-muted">
+                    {loading
+                      ? 'The first request after a cold start can take a little longer on CPU.'
+                      : 'Add a scan, the patient details, or both, then press Analyze.'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+        {tab === 'model' && <ModelCard />}
+        {tab === 'about' && <About />}
       </main>
 
-      {/* Footer */}
-      <footer className="mt-12 py-6 text-center text-xs text-gray-400 border-t border-gray-200">
-        Multi-Modal Disease Detection System &mdash; For Research Purposes Only
+      <footer className="border-t border-line py-6 text-center text-xs text-ink-muted no-print">
+        Research prototype. Not for clinical use.
       </footer>
     </div>
   )
